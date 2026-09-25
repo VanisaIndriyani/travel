@@ -239,7 +239,8 @@ require_once __DIR__ . '/../config/database.php';
             <!-- Logo -->
             <a href="<?= BASE_URL ?>" class="flex items-center gap-2 md:gap-3 group">
                 <img src="<?= BASE_URL ?>/logo.jpeg" alt="Logo Mustika Travel"
-                     class="h-10 w-10 md:h-12 md:w-12 rounded-full object-cover shadow-md border border-gold-300/70 ring-1 ring-gold-200">
+                     class="h-10 w-10 md:h-12 md:w-12 rounded-full object-cover shadow-md border border-gold-300/70 ring-1 ring-gold-200"
+                     width="48" height="48" decoding="async">
                 <div class="leading-tight">
                     <div class="text-xl md:text-[1.65rem] font-semibold tracking-tight">
                         <span class="text-navy-900">Mustika</span>

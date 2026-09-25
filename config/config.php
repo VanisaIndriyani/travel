@@ -42,10 +42,65 @@ define('PEMBATALAN_INFO', 'Pembatalan tiket dikenakan denda 50% dari harga tiket
 define('DEFAULT_ADMIN_USER', 'admin');
 define('DEFAULT_ADMIN_PASS', 'admin123');
 
-// 7. URL Path (sesuaikan jika domain berbeda / subfolder)
-// Kalau di Laragon biasanya localhost atau nama_project.test
-// PENTING: JANGAN SAMPAI ADA AKHIR GARIS MIRING (/) DI AKHIR!
-define('BASE_URL', 'http://localhost/SEPTEMBER/Travel');
+// 7. URL Path — AUTO-DETECT (jangan hardcode localhost!)
+// Berjalan di Laragon (…/SEPTEMBER/Travel) maupun hosting (…/travel) tanpa edit manual.
+// Opsional override: define('BASE_URL_OVERRIDE', 'https://domain.com/travel'); sebelum require config.
+if (!function_exists('mustika_detect_base_url')) {
+    function mustika_detect_base_url(): string
+    {
+        if (defined('BASE_URL_OVERRIDE') && is_string(BASE_URL_OVERRIDE) && BASE_URL_OVERRIDE !== '') {
+            return rtrim(BASE_URL_OVERRIDE, '/');
+        }
+
+        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (isset($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443)
+            || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string)$_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https')
+            || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on');
+        $scheme = $https ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? 'localhost');
+
+        $basePath = '';
+        $detected = false;
+        $projectRoot = realpath(__DIR__ . '/..');
+        $docRoot = !empty($_SERVER['DOCUMENT_ROOT']) ? realpath($_SERVER['DOCUMENT_ROOT']) : false;
+
+        if ($projectRoot && $docRoot) {
+            $projectRootNorm = str_replace('\\', '/', $projectRoot);
+            $docRootNorm = rtrim(str_replace('\\', '/', $docRoot), '/');
+            // stripos: Windows path case-insensitive
+            if ($docRootNorm !== '' && stripos($projectRootNorm, $docRootNorm) === 0) {
+                $basePath = substr($projectRootNorm, strlen($docRootNorm));
+                $detected = true;
+            }
+        }
+
+        // Fallback: dari SCRIPT_NAME (index.php / booking.php / admin/*.php)
+        if (!$detected) {
+            $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+            $dir = str_replace('\\', '/', dirname($script));
+            // Jika request dari /admin/…, naik 1 level ke root project
+            if (strcasecmp(basename($dir), 'admin') === 0) {
+                $dir = str_replace('\\', '/', dirname($dir));
+            }
+            if ($dir === '/' || $dir === '.' || $dir === '\\') {
+                $basePath = '';
+            } else {
+                $basePath = $dir;
+            }
+        }
+
+        $basePath = '/' . trim(str_replace('\\', '/', (string)$basePath), '/');
+        if ($basePath === '/') {
+            $basePath = '';
+        }
+
+        return rtrim($scheme . '://' . $host . $basePath, '/');
+    }
+}
+
+if (!defined('BASE_URL')) {
+    define('BASE_URL', mustika_detect_base_url());
+}
 
 // 8. Session Start (untuk flash message & admin login)
 if (session_status() === PHP_SESSION_NONE) {

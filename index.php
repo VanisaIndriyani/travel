@@ -237,7 +237,10 @@ $listRuteAktif = get_rutes(true);
     <img src="<?= BASE_URL ?>/mob1.jpeg"
          alt="Armada Mustika Travel"
          class="hero-photo absolute inset-0 z-0 w-full h-full object-cover object-[center_70%]"
-         width="1600" height="2400">
+         width="1600" height="2400"
+         fetchpriority="high"
+         decoding="async"
+         onerror="this.onerror=null;this.removeAttribute('src');">
     <div class="absolute inset-x-0 bottom-0 h-28 z-0 pointer-events-none bg-gradient-to-t from-cream-50/55 to-transparent"></div>
     <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/40 to-transparent z-10"></div>
 
