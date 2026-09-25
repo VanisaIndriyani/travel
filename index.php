@@ -387,30 +387,10 @@ $listRuteAktif = get_rutes(true);
                 </h2>
                 <p class="text-slate-600 mb-6 max-w-md text-sm leading-relaxed">
                     Tersedia <span class="font-semibold text-navy-800"><?= count($listRuteAktif) ?>+ pilihan jurusan</span> favorit dengan jadwal fleksibel setiap hari.
-                    Door-to-door service sepenuhnya dari rumah Anda ke tujuan akhir.
+                 
                 </p>
 
-                <div class="mb-8 p-5 md:p-6 rounded-2xl bg-white border border-gold-200/70 shadow-card">
-                    <div class="text-[11px] uppercase tracking-[0.16em] text-navy-600 mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-ticket-simple text-gold-600"></i> Harga tiket travel reguler (per orang)
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div class="p-4 rounded-2xl bg-cream-50 border border-cream-200">
-                            <div class="flex items-center justify-between mb-2">
-                                <div class="text-[11px] uppercase tracking-wider text-navy-700">Pekerja Proyek</div>
-                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gold-50 text-gold-700 border border-gold-200">Promo</span>
-                            </div>
-                            <div class="font-serif text-[1.7rem] text-navy-900 leading-none">Rp 120.000<span class="text-xs text-slate-500 font-sans font-medium ml-1">/ seat</span></div>
-                        </div>
-                        <div class="p-4 rounded-2xl bg-navy-900 text-cream-50">
-                            <div class="flex items-center justify-between mb-2">
-                                <div class="text-[11px] uppercase tracking-wider text-gold-300">Tiket Normal</div>
-                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-gold-400/40 text-gold-300">Umum</span>
-                            </div>
-                            <div class="font-serif text-[1.7rem] leading-none">Rp 150.000<span class="text-xs text-cream-200/70 font-sans font-medium ml-1">/ seat</span></div>
-                        </div>
-                    </div>
-                </div>
+             
 
                 <div class="jurusan-grid">
                     <?php foreach ($listRuteAktif as $i => $r):
