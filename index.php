@@ -310,7 +310,7 @@ $listRuteAktif = get_rutes(true);
                 <?php endforeach; ?>
             </div>
 
-            <div class="flex flex-col sm:flex-row w-full sm:w-auto gap-3 mb-8 justify-center">
+            <div class="flex flex-col sm:flex-row w-full sm:w-auto gap-3 mb-6 justify-center">
                 <a href="<?= BASE_URL ?>/booking.php" class="shine-btn w-full sm:w-auto inline-flex items-center justify-center gap-2.5 font-bold px-7 py-3.5 rounded-xl bg-gradient-to-r from-gold-300 via-gold-400 to-gold-600 text-navy-900 shadow-gold-glow hover:-translate-y-0.5 transition">
                     <i class="fa-solid fa-ticket-simple"></i> Booking Tiket Sekarang
                     <i class="fa-solid fa-arrow-right text-xs"></i>
@@ -320,6 +320,38 @@ $listRuteAktif = get_rutes(true);
                    class="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl border border-navy-800/15 bg-white text-navy-900 font-semibold hover:border-gold-500/50 hover:bg-cream-50 transition shadow-sm">
                     <i class="fa-brands fa-whatsapp text-lg text-emerald-600"></i> Chat Admin WA
                 </a>
+            </div>
+
+            <!-- Jadwal rute utama harian — hero -->
+            <div class="mb-8 mx-auto max-w-lg rounded-2xl border border-white/40 bg-white/95 backdrop-blur-sm shadow-lg px-3.5 py-3.5 sm:px-4 sm:py-4 text-left">
+                <div class="flex items-center justify-between gap-2 mb-3">
+                    <p class="text-[11px] font-bold uppercase tracking-[0.14em] text-navy-800">
+                        <i class="fa-solid fa-clock text-gold-600 mr-1.5"></i>Jadwal setiap hari
+                    </p>
+                    <a href="#jadwal" class="text-[10px] font-semibold text-gold-700 hover:text-gold-600 whitespace-nowrap">Detail →</a>
+                </div>
+                <div class="grid grid-cols-1 gap-2.5">
+                    <div class="rounded-xl bg-cream-50 border border-cream-200 px-3 py-2.5">
+                        <p class="text-[12px] font-bold text-navy-900 mb-1.5">
+                            <i class="fa-solid fa-route text-gold-600 mr-1"></i>Blora → Surabaya
+                        </p>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-navy-900 text-cream-50 text-[12px] font-bold tracking-wide">08.00</span>
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-navy-900 text-cream-50 text-[12px] font-bold tracking-wide">11.00</span>
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-navy-900 text-cream-50 text-[12px] font-bold tracking-wide">20.00</span>
+                        </div>
+                    </div>
+                    <div class="rounded-xl bg-cream-50 border border-cream-200 px-3 py-2.5">
+                        <p class="text-[12px] font-bold text-navy-900 mb-1.5">
+                            <i class="fa-solid fa-route text-gold-600 mr-1"></i>Surabaya → Blora
+                        </p>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-navy-900 text-cream-50 text-[12px] font-bold tracking-wide">10.00</span>
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-navy-900 text-cream-50 text-[12px] font-bold tracking-wide">15.00</span>
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-navy-900 text-cream-50 text-[12px] font-bold tracking-wide">20.00</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="grid grid-cols-3 gap-3 max-w-lg mx-auto">
