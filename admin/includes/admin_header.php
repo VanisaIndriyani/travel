@@ -260,6 +260,13 @@ $notifList = $stmtNotif3 ? $stmtNotif3->fetchAll() : [];
                 <span class="sidebar-ico"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
                 <span class="sidebar-link-text">Lihat Website</span>
             </a>
+            <a href="<?= BASE_URL ?>/admin/profile.php" class="sidebar-link <?= ($active === 'profile') ? 'active' : '' ?>" @click="sidebar_open = false">
+                <span class="sidebar-ico"><i class="fa-solid fa-user-pen"></i></span>
+                <span class="sidebar-link-text">Edit Profil</span>
+                <?php if ($active === 'profile'): ?>
+                    <i class="fa-solid fa-chevron-right text-[10px] text-gold-300 shrink-0"></i>
+                <?php endif; ?>
+            </a>
             <a href="<?= BASE_URL ?>/admin/logout.php"
                onclick="return confirm('Yakin ingin logout dari dashboard Mustika Travel?')"
                class="sidebar-link" style="color:#FECACA">
@@ -268,9 +275,11 @@ $notifList = $stmtNotif3 ? $stmtNotif3->fetchAll() : [];
             </a>
         </nav>
 
-        <!-- User info card (bottom sidebar) -->
+        <!-- User info card (bottom sidebar) → Edit Profil -->
         <div class="p-4 border-t border-white/10 relative z-10">
-            <div class="flex items-center gap-3.5 px-3 py-3 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition">
+            <a href="<?= BASE_URL ?>/admin/profile.php" @click="sidebar_open = false"
+               class="flex items-center gap-3.5 px-3 py-3 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 transition"
+               title="Edit profil">
                 <div class="relative flex-shrink-0">
                     <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-lg font-extrabold shadow-glow border-2 border-white/10">
                         <?= strtoupper(mb_substr($admin_name, 0, 1)) ?>
@@ -282,11 +291,12 @@ $notifList = $stmtNotif3 ? $stmtNotif3->fetchAll() : [];
                 <div class="min-w-0 flex-1 leading-tight">
                     <div class="text-sm font-extrabold text-white truncate"><?= e($admin_name) ?></div>
                     <div class="text-[11px] text-blue-200/70 font-medium flex items-center gap-1.5">
-                        <i class="fa-solid fa-id-card text-[10px]"></i>
-                        Super Administrator
+                        <i class="fa-solid fa-user-pen text-[10px]"></i>
+                        Edit profil
                     </div>
                 </div>
-            </div>
+                <i class="fa-solid fa-chevron-right text-[10px] text-gold-300/80 shrink-0"></i>
+            </a>
         </div>
     </aside>
 
@@ -410,12 +420,14 @@ $notifList = $stmtNotif3 ? $stmtNotif3->fetchAll() : [];
                     </div>
                 </div>
 
-                <!-- Profile pill -->
-                <div class="flex items-center gap-3 pl-3 pr-2 py-1.5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer">
+                <!-- Profile pill → Edit Profil -->
+                <a href="<?= BASE_URL ?>/admin/profile.php"
+                   class="flex items-center gap-3 pl-3 pr-2 py-1.5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-gold-300 transition"
+                   title="Edit profil">
                     <div class="text-right leading-tight hidden md:block">
                         <div class="text-sm font-extrabold text-slate-900"><?= e($admin_name) ?></div>
                         <div class="text-[11px] text-gold-600 font-bold flex items-center justify-end gap-1">
-                            <i class="fa-solid fa-crown text-[10px]"></i> Owner
+                            <i class="fa-solid fa-user-pen text-[10px]"></i> Edit profil
                         </div>
                     </div>
                     <div class="relative">
@@ -423,7 +435,7 @@ $notifList = $stmtNotif3 ? $stmtNotif3->fetchAll() : [];
                             <?= strtoupper(mb_substr($admin_name, 0, 1)) ?>
                         </div>
                     </div>
-                </div>
+                </a>
             </div>
         </header>
 
