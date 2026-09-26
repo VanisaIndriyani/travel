@@ -77,6 +77,8 @@ if (!empty($_GET['edit']) && ctype_digit($_GET['edit'])) {
 }
 $defaultHarga = get_harga_rute_default();
 $listRuteAdmin = get_rutes(false);
+// Impor dari WA: AI opsional (OPENAI_API_KEY / AI_API_KEY di .env); tanpa key tetap pakai parser lokal.
+$waAiAvailable = defined('OPENAI_API_KEY') && OPENAI_API_KEY !== '';
 ?>
 
 <?php
@@ -104,6 +106,7 @@ $lokOpsis = [
                 <p class="dash-hero-desc"><?= (int)$totalData ?> pemesanan ditampilkan · online &amp; manual.</p>
             </div>
             <div class="dash-hero-actions">
+                <button type="button" onclick="window.modalWaImport.open()" class="is-ghost"><i class="fa-brands fa-whatsapp"></i> Impor dari WA</button>
                 <button type="button" onclick="window.modalTambah.open()" class="is-gold"><i class="fa-solid fa-plus"></i> Tambah booking</button>
             </div>
         </div>
@@ -328,6 +331,204 @@ $lokOpsis = [
             </tbody>
         </table>
     </div>
+</div>
+
+<!-- ===========================================
+     MODAL IMPOR DARI WA (teks / screenshot → preview → simpan)
+     Tanpa OPENAI_API_KEY: parser lokal. Screenshot butuh AI vision.
+     =========================================== -->
+<div x-data="modalWaImportData()" x-init="window.modalWaImport = $data">
+    <template x-if="show">
+        <div class="admin-modal-overlay" x-transition.opacity>
+            <div @click="close()" class="absolute inset-0"></div>
+            <div class="admin-modal wa-import-modal w-full max-w-full sm:max-w-3xl" @click.stop>
+                <div class="admin-modal-head">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="admin-modal-ico"><i class="fa-brands fa-whatsapp"></i></div>
+                        <div class="min-w-0">
+                            <h3>Impor dari WhatsApp</h3>
+                            <p x-text="step === 1 ? 'Tempel chat atau upload screenshot' : 'Periksa data, lalu simpan ke pemesanan'"></p>
+                        </div>
+                    </div>
+                    <button type="button" @click="close()" class="admin-modal-close" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
+                <!-- STEP 1: input -->
+                <div class="admin-modal-body" x-show="step === 1">
+                    <label class="form-label">Teks chat WhatsApp *</label>
+                    <textarea class="input-field wa-import-ta" rows="8" x-model="chatText"
+                              placeholder="Contoh:&#10;Nama: Budi Santoso&#10;HP: 081234567890&#10;Jemput: Jl. Pemuda No.12, Blora&#10;Tujuan: Jl. Ahmad Yani, Surabaya&#10;Rute: Blora - Surabaya&#10;Tanggal: 28/09/2026&#10;Kursi: 2&#10;Jam: 08.00&#10;Barang: 1 koper"></textarea>
+
+                    <div class="mt-4" x-show="aiAvailable">
+                        <label class="form-label">Screenshot chat <span class="text-slate-400 font-normal text-xs">(opsional, butuh Vision API)</span></label>
+                        <label class="wa-import-file">
+                            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="sr-only" @change="onFile($event)">
+                            <i class="fa-solid fa-image"></i>
+                            <span x-text="fileName || 'Pilih gambar JPG / PNG'"></span>
+                        </label>
+                        <button type="button" class="text-[11px] font-bold text-red-600 mt-1.5 underline" x-show="fileName" @click="clearFile()">Hapus gambar</button>
+                    </div>
+
+                    <div class="wa-import-err" x-show="error" x-text="error"></div>
+                </div>
+
+                <!-- STEP 2: preview form (sama field dengan tambah booking) -->
+                <form method="POST" action="<?= BASE_URL ?>/admin/proses_tambah_booking.php"
+                      class="flex-1 min-h-0 flex flex-col" x-show="step === 2" @submit="saving = true">
+                    <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+                    <div class="admin-modal-body grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2 wa-import-banner is-preview">
+                            <i class="fa-solid fa-circle-check"></i>
+                            <div class="text-[11px] leading-relaxed" x-text="infoMsg"></div>
+                        </div>
+
+                        <div class="admin-modal-section">Penumpang</div>
+                        <div>
+                            <label class="form-label">Nama Lengkap *</label>
+                            <input name="nama" required type="text" class="input-field" x-model="form.nama">
+                        </div>
+                        <div>
+                            <label class="form-label">No. HP / WA *</label>
+                            <input name="no_hp" required type="tel" class="input-field" x-model="form.no_hp">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="form-label">Alamat Penjemputan *</label>
+                            <textarea name="alamat_jemput" required rows="2" class="input-field resize-none" x-model="form.alamat_jemput"></textarea>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="form-label">Pin Maps <span class="text-slate-400 font-normal text-xs">(opsional)</span></label>
+                            <input name="maps_link" type="url" class="input-field" x-model="form.maps_link"
+                                   placeholder="https://maps.app.goo.gl/... atau link Google Maps">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="form-label">Alamat Tujuan *</label>
+                            <textarea name="alamat_tujuan" required rows="2" class="input-field resize-none" x-model="form.alamat_tujuan"></textarea>
+                        </div>
+
+                        <div class="admin-modal-section">Rute &amp; keberangkatan</div>
+                        <div class="md:col-span-2">
+                            <label class="form-label">Pilih rute perjalanan</label>
+                            <select name="id_rute" class="input-field !py-3 font-bold text-slate-800"
+                                    x-model.number="form.id_rute" @change="hitungTotalFromRute">
+                                <option value="0">— Tanpa Rute (Custom / Harga Khusus) —</option>
+                                <?php foreach ($listRuteAdmin as $rRA):
+                                    $isAktif = (int)($rRA['is_aktif'] ?? 1) === 1;
+                                    $labelAktif = $isAktif ? '' : '  [Nonaktif]';
+                                ?>
+                                    <option value="<?= (int)($rRA['id'] ?? 0) ?>"
+                                            data-harga="<?= (int)$rRA['harga'] ?>"
+                                            data-nama="<?= e($rRA['nama_rute']) ?>">
+                                        🛣️ <?= e($rRA['nama_rute']) ?> · <?= rupiah($rRA['harga']) ?><?= $labelAktif ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="text-[11px] text-slate-500 mt-1" x-show="form.rute">
+                                Deteksi rute: <b class="text-navy-800" x-text="form.rute"></b>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label">Jumlah Kursi *</label>
+                            <input name="jumlah_kursi" required type="number" min="1" max="50" class="input-field"
+                                   x-model.number="form.jumlah_kursi" @input="hitungTotalFromRute">
+                        </div>
+                        <div>
+                            <label class="form-label">Tanggal Berangkat *</label>
+                            <input name="tanggal_berangkat" required type="date" class="input-field" x-model="form.tanggal_berangkat">
+                        </div>
+                        <div>
+                            <label class="form-label">Jam Jemput *</label>
+                            <input name="jam_jemput" required type="time" class="input-field" x-model="form.jam_jemput">
+                        </div>
+                        <div>
+                            <label class="form-label">Status *</label>
+                            <select name="status" class="input-field" x-model="form.status">
+                                <option value="pending">Pending</option>
+                                <option value="confirmed">Terkonfirmasi</option>
+                                <option value="completed">Selesai</option>
+                                <option value="cancelled">Dibatalkan</option>
+                            </select>
+                        </div>
+
+                        <div class="admin-modal-section">Lokasi &amp; jadwal</div>
+                        <div class="md:col-span-2">
+                            <label class="form-label">Lokasi area penjemputan *</label>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                                <?php foreach ($lokOpsis as [$lokVal,$lokDesc,$lokIco]): ?>
+                                    <label>
+                                        <input type="radio" name="lokasi_jemput" value="<?= $lokVal ?>" x-model="form.lokasi_jemput" class="peer sr-only">
+                                        <span class="bk-loc">
+                                            <span class="flex items-start gap-2">
+                                                <i class="fa-solid <?= $lokIco ?> text-gold-600 mt-0.5 text-xs"></i>
+                                                <span>
+                                                    <span class="block text-xs font-extrabold text-navy-900"><?= $lokVal ?></span>
+                                                    <span class="block text-[10px] text-slate-500 mt-0.5"><?= $lokDesc ?></span>
+                                                </span>
+                                            </span>
+                                        </span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="form-label flex items-center gap-1.5">
+                                <i class="fa-regular fa-clock text-amber-600"></i> Jadwal Keberangkatan *
+                            </label>
+                            <select name="jadwal_jemput" x-model="form.jadwal_jemput" required class="input-field !py-3 font-semibold">
+                                <option value="">— Pilih jadwal sesuai lokasi penjemputan —</option>
+                                <optgroup x-show="form.lokasi_jemput === 'Blora'" label="Blora">
+                                    <option value="Jam 08.00 — Kota-kota Penjemputan area Blora">08.00 · Kota-kota Penjemputan</option>
+                                    <option value="Jam 11.00 — (KHUSUS!) Door to Door SEMUA KECAMATAN BLORA (Unit Hiace)">11.00 · Door to Door SEMUA KECAMATAN BLORA</option>
+                                    <option value="Jam 20.00 — Kota-kota Penjemputan area Blora">20.00 · Kota-kota Penjemputan</option>
+                                </optgroup>
+                                <optgroup x-show="(form.lokasi_jemput === 'Surabaya' || form.lokasi_jemput === 'Sidoarjo')" label="Surabaya / Sidoarjo">
+                                    <option value="Jam 10.00 — Start dari Bandara Juanda (Surabaya)">10.00 · Start dari Bandara Juanda</option>
+                                    <option value="Jam 15.00 — Start dari Bandara Juanda (Surabaya)">15.00 · Start dari Bandara Juanda</option>
+                                    <option value="Jam 20.00 — (KHUSUS!) Start dari Sidoarjo · Door to Door SEMUA KECAMATAN Sidoarjo + Surabaya/Gresik">20.00 · Door to Door KHUSUS</option>
+                                </optgroup>
+                                <optgroup x-show="form.lokasi_jemput === 'Lainnya'" label="Lainnya">
+                                    <option value="Jam 06.00 — Jadwal Khusus Lokasi Lainnya">06.00 · Jadwal Khusus</option>
+                                    <option value="Jam 08.00 — Jadwal Khusus Lokasi Lainnya">08.00 · Jadwal Khusus</option>
+                                    <option value="Jam 12.00 — Jadwal Khusus Lokasi Lainnya">12.00 · Jadwal Khusus</option>
+                                    <option value="Jam 20.00 — Jadwal Khusus Lokasi Lainnya">20.00 · Jadwal Khusus</option>
+                                </optgroup>
+                            </select>
+                        </div>
+
+                        <div class="admin-modal-section">Pembayaran &amp; catatan</div>
+                        <div class="md:col-span-2">
+                            <label class="form-label">Barang bawaan</label>
+                            <input name="barang_bawaan" type="text" class="input-field" x-model="form.barang_bawaan">
+                        </div>
+                        <div>
+                            <label class="form-label">Total harga (Rp) *</label>
+                            <input name="total_harga" required type="number" min="0" class="input-field" x-model.number="form.total_harga">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="form-label">Catatan Admin</label>
+                            <textarea name="catatan_admin" rows="2" class="input-field resize-none" x-model="form.catatan_admin"></textarea>
+                        </div>
+                    </div>
+                    <div class="admin-modal-foot">
+                        <button type="button" @click="step = 1" class="btn-secondary" :disabled="saving">
+                            <i class="fa-solid fa-arrow-left"></i> Ubah chat
+                        </button>
+                        <button type="submit" class="btn-success" :disabled="saving">
+                            <i class="fa-solid fa-floppy-disk"></i>
+                            <span x-text="saving ? 'Menyimpan…' : 'Simpan ke pemesanan'"></span>
+                        </button>
+                    </div>
+                </form>
+
+                <div class="admin-modal-foot" x-show="step === 1">
+                    <button type="button" @click="close()" class="btn-secondary">Batal</button>
+                    <button type="button" class="btn-primary" @click="extract()" :disabled="loading">
+                        <i class="fa-solid" :class="loading ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'"></i>
+                        <span x-text="loading ? 'Mengekstrak…' : 'Isi otomatis dari chat'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
 </div>
 
 <!-- ===========================================
@@ -803,6 +1004,110 @@ function modalHapusData(){
             this.show = true;
         },
         close(){ this.show = false; }
+    };
+}
+// ==== Modal Impor dari WA ====
+function modalWaImportData(){
+    const emptyForm = () => ({
+        nama:'', no_hp:'', alamat_jemput:'', alamat_tujuan:'',
+        id_rute: 0, rute:'',
+        jumlah_kursi:1, tanggal_berangkat: '<?= date('Y-m-d') ?>',
+        jam_jemput:'06:00', status:'confirmed', barang_bawaan:'',
+        total_harga: <?= (int)$defaultHarga ?>, catatan_admin:'',
+        lokasi_jemput:'Blora', jadwal_jemput:'', maps_link:''
+    });
+    return {
+        show: false,
+        step: 1,
+        loading: false,
+        saving: false,
+        error: '',
+        infoMsg: '',
+        chatText: '',
+        file: null,
+        fileName: '',
+        aiAvailable: <?= $waAiAvailable ? 'true' : 'false' ?>,
+        defaultHarga: <?= (int)$defaultHarga ?>,
+        form: emptyForm(),
+        open(){
+            this.step = 1;
+            this.loading = false;
+            this.saving = false;
+            this.error = '';
+            this.infoMsg = '';
+            this.chatText = '';
+            this.clearFile();
+            this.form = emptyForm();
+            this.show = true;
+        },
+        close(){ this.show = false; },
+        onFile(ev){
+            const f = ev.target.files && ev.target.files[0] ? ev.target.files[0] : null;
+            this.file = f;
+            this.fileName = f ? f.name : '';
+            this.error = '';
+        },
+        clearFile(){
+            this.file = null;
+            this.fileName = '';
+        },
+        async extract(){
+            this.error = '';
+            const text = (this.chatText || '').trim();
+            if (!text && !this.file) {
+                this.error = 'Tempel teks chat WA dulu' + (this.aiAvailable ? ', atau pilih screenshot.' : '.');
+                return;
+            }
+            if (!text && this.file && !this.aiAvailable) {
+                this.error = 'Screenshot butuh API key. Tempel teks chat saja.';
+                return;
+            }
+            this.loading = true;
+            try {
+                const fd = new FormData();
+                fd.append('csrf_token', '<?= csrf_token() ?>');
+                fd.append('chat_text', text);
+                if (this.file) fd.append('screenshot', this.file);
+                const res = await fetch('<?= BASE_URL ?>/admin/proses_parse_wa.php', {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'same-origin'
+                });
+                const data = await res.json();
+                if (!data || !data.ok) {
+                    this.error = (data && data.message) ? data.message : 'Gagal mengekstrak data.';
+                    return;
+                }
+                const f = data.fields || {};
+                this.form = Object.assign(emptyForm(), f, {
+                    id_rute: parseInt(f.id_rute) || 0,
+                    jumlah_kursi: Math.max(1, parseInt(f.jumlah_kursi) || 1),
+                    total_harga: parseInt(f.total_harga) || this.defaultHarga,
+                    status: f.status || 'confirmed',
+                    lokasi_jemput: f.lokasi_jemput || 'Blora',
+                });
+                this.infoMsg = data.message || 'Periksa data sebelum simpan.';
+                this.step = 2;
+                this.$nextTick(() => this.hitungTotalFromRute());
+            } catch (e) {
+                this.error = 'Koneksi gagal. Coba lagi atau isi manual.';
+            } finally {
+                this.loading = false;
+            }
+        },
+        hitungTotalFromRute(){
+            try {
+                const rootEl = this.$root;
+                const sel = rootEl ? rootEl.querySelector('select[name="id_rute"]') : null;
+                let hargaPerOrg = this.defaultHarga;
+                if (sel && sel.selectedOptions.length > 0) {
+                    const h = parseInt(sel.selectedOptions[0].dataset.harga);
+                    if (h > 0) hargaPerOrg = h;
+                }
+                const jml = Math.max(1, parseInt(this.form.jumlah_kursi) || 1);
+                this.form.total_harga = jml * hargaPerOrg;
+            } catch (e) {}
+        }
     };
 }
 // ==== Alpine.js Data: Modal Tambah ====

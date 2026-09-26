@@ -114,3 +114,36 @@ INSERT INTO `bookings`
 (1, 'Blora - Semarang',   200000, 'Ahmad Fauzi',       '085611223344', 'Perum Griya Indah Blora',    'Jl. Pandanaran Semarang',       3, DATE_ADD(CURDATE(), INTERVAL 1 DAY), '07:00:00', '3 Koper + Kardus',       600000, 'pending', 'online',   'Menunggu pembayaran DP (Semarang 200rb × 3)'),
 (5, 'Blora - Malang',     350000, 'Dewi Lestari',      '082233445566', 'Kota Blora',                 'Kota Malang',                   2, DATE_ADD(CURDATE(), INTERVAL 2 DAY), '05:00:00', '2 Tas',                  700000, 'completed', 'online', 'Lunas (Malang 350rb × 2)'),
 (4, 'Blora - Surabaya',   300000, 'Pak Slamet',        '087711223344', 'Desa Sumberjo Blora',        'Stasiun Kota Surabaya',         1, CURDATE(),                 '06:30:00', 'Barang bawaan 2 kardus', 300000, 'cancelled', 'manual', 'Minta batalkan - ada keperluan (Surabaya 300rb × 1)');
+
+-- =======================================================
+-- 5. Tabel Setoran Harian (driver + operasional + fee agen)
+-- =======================================================
+CREATE TABLE IF NOT EXISTS `laporan_harian` (
+  `id`           INT AUTO_INCREMENT PRIMARY KEY,
+  `tanggal`      DATE         NOT NULL,
+  `driver_name`  VARCHAR(120) NOT NULL DEFAULT '',
+  `bbm`          INT          NOT NULL DEFAULT 0 COMMENT 'Biaya BBM',
+  `toll`         INT          NOT NULL DEFAULT 0 COMMENT 'Biaya toll',
+  `fee_ops`      INT          NOT NULL DEFAULT 0 COMMENT 'Fee operasional lain',
+  `ops_lain`     INT          NOT NULL DEFAULT 0 COMMENT 'Operasional tambahan (opsional)',
+  `notes`        TEXT         NULL,
+  `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY `unik_tanggal` (`tanggal`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `laporan_fee_agen` (
+  `id`          INT AUTO_INCREMENT PRIMARY KEY,
+  `tanggal`     DATE         NOT NULL,
+  `booking_id`  INT          NOT NULL,
+  `fee_agen`    INT          NOT NULL DEFAULT 0,
+  `arah`        ENUM('berangkat','pulang') NOT NULL DEFAULT 'berangkat'
+                COMMENT 'Override arah: Blora=berangkat, Surabaya=pulang',
+  `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY `unik_tgl_booking` (`tanggal`, `booking_id`),
+  INDEX `idx_tanggal` (`tanggal`),
+  INDEX `idx_booking` (`booking_id`),
+  CONSTRAINT `fk_fee_booking` FOREIGN KEY (`booking_id`) REFERENCES `bookings` (`id`)
+    ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

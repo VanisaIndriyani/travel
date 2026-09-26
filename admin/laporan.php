@@ -193,14 +193,26 @@ $namaBulan = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agust
             <div class="dash-kpi-label">Booking selesai</div>
             <div class="dash-kpi-value"><?= (int)$lHari_totalBooking ?></div>
         </div>
-        <div class="dash-kpi-card is-wide">
+        <div class="dash-kpi-card is-wide lap-kpi-clickable" role="button" tabindex="0"
+             onclick="window.modalSetoran && window.modalSetoran.open('<?= e($lHari_tanggal) ?>')"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.modalSetoran&&window.modalSetoran.open('<?= e($lHari_tanggal) ?>')}">
             <div class="dash-kpi-ico" style="background:linear-gradient(135deg,#D4B56A,#9A7B1F)"><i class="fa-solid fa-coins"></i></div>
-            <div class="dash-kpi-label">Pendapatan hari ini</div>
+            <div class="dash-kpi-label">Pendapatan hari ini · ketuk untuk setoran</div>
             <div class="dash-kpi-value"><?= rupiah($lHari_totalPendapatan) ?></div>
             <?php if ($lHari_totalBooking > 0): ?>
             <div class="text-xs text-slate-500 mt-1">Rata-rata <?= rupiah((int)round($lHari_totalPendapatan / $lHari_totalBooking)) ?> / booking</div>
             <?php endif; ?>
         </div>
+    </div>
+    <div class="no-print px-4 pb-3 sm:px-5 flex flex-col sm:flex-row gap-2">
+        <button type="button" class="btn-primary w-full sm:w-auto"
+                onclick="window.modalSetoran && window.modalSetoran.open('<?= e($lHari_tanggal) ?>')">
+            <i class="fa-solid fa-receipt"></i> Detail setoran &amp; fee agen
+        </button>
+        <button type="button" class="btn-secondary w-full sm:w-auto js-lap-copy"
+                data-tanggal="<?= e($lHari_tanggal) ?>">
+            <i class="fa-regular fa-copy"></i> Salin ringkasan
+        </button>
     </div>
 
     <!-- Tabel Detail -->
@@ -275,7 +287,7 @@ $namaBulan = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agust
                 <button type="button" onclick="window.print()" class="btn-secondary"><i class="fa-solid fa-print"></i> Cetak</button>
             </div>
         </form>
-        <div class="text-xs font-bold text-navy-800 mt-2">Periode <?= e(tgl_id($mingguStart)) ?> s/d <?= e(tgl_id($mingguEnd)) ?></div>
+        <div class="text-xs font-bold text-navy-800 mt-2">Periode <?= e(tgl_id($mingguStart)) ?> s/d <?= e(tgl_id($mingguEnd)) ?> · <span class="text-gold-700 font-extrabold">ketuk baris</span> untuk detail setoran</div>
     </div>
 
     <div class="hidden print-only lap-print-head">
@@ -303,49 +315,38 @@ $namaBulan = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agust
     </div>
 
     <!-- Ringkasan per hari -->
-    <div class="table-wrap is-sticky-col !rounded-none !border-0">
+    <div class="table-wrap is-cards lap-days-wrap !rounded-none !border-0">
         <table class="admin-table">
             <thead>
                 <tr>
                     <th>Hari</th>
                     <th>Tanggal</th>
-                    <th class="text-center">Jml Booking</th>
+                    <th class="text-center">Jml</th>
                     <th class="text-right">Total Pendapatan</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($lMing_perHari as $item): ?>
-                    <tr>
-                        <td class="font-bold text-slate-900"><?= $item['nama_hari'] ?></td>
-                        <td class="text-slate-700"><?= tgl_id($item['tanggal']) ?></td>
-                        <td class="text-center font-bold <?= $item['jml_booking'] > 0 ? 'text-primary-700' : 'text-slate-400' ?>"><?= $item['jml_booking'] ?></td>
-                        <td class="text-right font-extrabold whitespace-nowrap <?= $item['total'] > 0 ? 'text-green-700' : 'text-slate-400' ?>"><?= rupiah($item['total']) ?></td>
+                    <tr class="lap-row-clickable" role="button" tabindex="0"
+                        data-tanggal="<?= e($item['tanggal']) ?>"
+                        title="Buka detail setoran <?= e($item['nama_hari']) ?>">
+                        <td class="font-bold text-slate-900" data-label="Hari">
+                            <span class="inline-flex items-center gap-1.5">
+                                <?= $item['nama_hari'] ?>
+                                <i class="fa-solid fa-chevron-right text-[10px] text-gold-600 opacity-70 no-print lap-row-chevron"></i>
+                            </span>
+                        </td>
+                        <td class="text-slate-700" data-label="Tanggal"><?= tgl_id($item['tanggal']) ?></td>
+                        <td class="text-center font-bold <?= $item['jml_booking'] > 0 ? 'text-primary-700' : 'text-slate-400' ?>" data-label="Jml"><?= $item['jml_booking'] ?></td>
+                        <td class="text-right font-extrabold whitespace-nowrap <?= $item['total'] > 0 ? 'text-green-700' : 'text-slate-400' ?>" data-label="Total Pendapatan">
+                            <span class="lap-day-actions">
+                                <span class="lap-pendapatan-link"><?= rupiah($item['total']) ?></span>
+                                <button type="button" class="lap-mini-btn js-lap-copy no-print" data-tanggal="<?= e($item['tanggal']) ?>" title="Salin ringkasan setoran" aria-label="Salin">
+                                    <i class="fa-regular fa-copy"></i>
+                                </button>
+                            </span>
+                        </td>
                     </tr>
-                    <!-- Detail tiap hari, jika ada booking -->
-                    <?php if (!empty($item['detail'])): ?>
-                        <tr class="lap-detail-row">
-                            <td colspan="4" class="!py-3 !px-6">
-                                <div class="text-[10px] font-extrabold uppercase tracking-[0.14em] text-gold-600 mb-1.5">
-                                    Detail <?= e($item['nama_hari']) ?> (<?= e(tgl_id($item['tanggal'])) ?>)
-                                </div>
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                                    <?php foreach ($item['detail'] as $d): ?>
-                                        <div class="flex items-start justify-between bg-cream-50 border border-cream-200 rounded-lg px-3 py-2">
-                                            <div>
-                                                <span class="font-bold text-navy-900">#MT-<?= $d['id'] ?></span>
-                                                <span class="text-slate-600 ml-2"><?= substr($d['jam_jemput'],0,5) ?> WIB</span>
-                                                <div class="text-slate-600 mt-0.5"><?= e($d['nama']) ?> · <?= e($d['no_hp']) ?></div>
-                                            </div>
-                                            <div class="text-right ml-2 flex-shrink-0">
-                                                <div class="font-bold text-navy-800 whitespace-nowrap"><?= rupiah($d['total_harga']) ?></div>
-                                                <div class="text-slate-400 text-[10px]"><?= $d['jumlah_kursi'] ?> kursi</div>
-                                            </div>
-                                        </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            </td>
-                        </tr>
-                    <?php endif; ?>
                 <?php endforeach; ?>
                 <tr class="lap-total-row">
                     <td colspan="2" class="text-right font-extrabold text-navy-900 uppercase tracking-wide">Total minggu ini</td>
@@ -431,13 +432,13 @@ $namaBulan = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agust
     </div>
 
     <!-- Tabel per tanggal -->
-    <div class="table-wrap is-cards is-sticky-col !rounded-none !border-0">
+    <div class="table-wrap is-cards lap-days-wrap !rounded-none !border-0">
         <table class="admin-table">
             <thead>
                 <tr>
                     <th>Tanggal</th>
                     <th>Hari</th>
-                    <th class="text-center">Jumlah Booking</th>
+                    <th class="text-center">Jml</th>
                     <th class="text-right">Total Pendapatan</th>
                 </tr>
             </thead>
@@ -453,11 +454,25 @@ $namaBulan = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agust
                     </tr>
                 <?php else:
                     foreach ($lBul_perTanggal as $item): ?>
-                        <tr>
-                            <td class="font-bold text-slate-900"><?= tgl_id($item['tanggal']) ?></td>
-                            <td class="text-slate-600"><?= nama_hari($item['tanggal']) ?></td>
-                            <td class="text-center font-bold text-primary-700"><?= $item['jml_booking'] ?></td>
-                            <td class="text-right font-extrabold text-green-700 whitespace-nowrap"><?= rupiah($item['total']) ?></td>
+                        <tr class="lap-row-clickable" role="button" tabindex="0"
+                            data-tanggal="<?= e($item['tanggal']) ?>"
+                            title="Buka detail setoran <?= e(tgl_id($item['tanggal'])) ?>">
+                            <td class="font-bold text-slate-900" data-label="Tanggal">
+                                <span class="inline-flex items-center gap-1.5">
+                                    <?= tgl_id($item['tanggal']) ?>
+                                    <i class="fa-solid fa-chevron-right text-[10px] text-gold-600 opacity-70 no-print lap-row-chevron"></i>
+                                </span>
+                            </td>
+                            <td class="text-slate-600" data-label="Hari"><?= nama_hari($item['tanggal']) ?></td>
+                            <td class="text-center font-bold text-primary-700" data-label="Jml"><?= $item['jml_booking'] ?></td>
+                            <td class="text-right font-extrabold text-green-700 whitespace-nowrap" data-label="Total Pendapatan">
+                                <span class="lap-day-actions">
+                                    <span class="lap-pendapatan-link"><?= rupiah($item['total']) ?></span>
+                                    <button type="button" class="lap-mini-btn js-lap-copy no-print" data-tanggal="<?= e($item['tanggal']) ?>" title="Salin ringkasan setoran" aria-label="Salin">
+                                        <i class="fa-regular fa-copy"></i>
+                                    </button>
+                                </span>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
@@ -659,5 +674,521 @@ $pdfRataHari = ($tab === 'harian' && $lHari_totalBooking > 0)
         <div class="pdf-footnote">Dicetak admin <?= e(SITE_NAME) ?> · <?= e(tgl_id(date('Y-m-d'))) ?> <?= date('H:i') ?> WIB · Kertas F4</div>
     </div>
 </div>
+
+<!-- =========================================
+     MODAL DETAIL SETORAN HARIAN
+     ========================================= -->
+<div class="no-print" x-data="modalSetoranData()" x-init="window.modalSetoran = $data">
+    <template x-if="show">
+        <div class="admin-modal-overlay" x-transition.opacity>
+            <div @click="close()" class="absolute inset-0"></div>
+            <div class="admin-modal lap-settle-modal w-full max-w-full sm:max-w-3xl lg:max-w-4xl" @click.stop>
+                <div class="admin-modal-head">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="admin-modal-ico"><i class="fa-solid fa-receipt"></i></div>
+                        <div class="min-w-0">
+                            <h3>Detail Setoran · 1 PP</h3>
+                            <p x-text="(hari || '') + (tanggalId ? ', ' + tanggalId : '')"></p>
+                        </div>
+                    </div>
+                    <button type="button" @click="close()" class="admin-modal-close" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
+                <div class="admin-modal-body space-y-4">
+                    <div x-show="loading" class="py-10 text-center text-slate-500 text-sm">
+                        <i class="fa-solid fa-spinner fa-spin text-lg text-navy-800"></i>
+                        <div class="mt-2 font-semibold">Memuat data…</div>
+                    </div>
+
+                    <div x-show="!loading && error" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-semibold" x-text="error"></div>
+
+                    <template x-if="!loading && !error">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="form-label">Driver</label>
+                                <input type="text" class="input-field" x-model="driver_name" placeholder="Nama driver (mis. Arif)" maxlength="120">
+                            </div>
+
+                            <!-- BERANGKAT -->
+                            <div>
+                                <div class="admin-modal-section !pt-0">Berangkat <span class="font-normal normal-case tracking-normal text-slate-400" x-text="'· ' + berangkat.length + ' booking'"></span></div>
+                                <div class="lap-pax-list" x-show="berangkat.length === 0">
+                                    <div class="lap-pax-empty">Tidak ada booking berangkat.</div>
+                                </div>
+                                <div class="lap-pax-list" x-show="berangkat.length > 0">
+                                    <template x-for="b in berangkat" :key="'b'+b.booking_id">
+                                        <div class="lap-pax-card">
+                                            <div class="lap-pax-top">
+                                                <div class="min-w-0">
+                                                    <div class="lap-pax-name" x-text="b.nama"></div>
+                                                    <div class="lap-pax-meta" x-text="'#MT-' + b.booking_id + ' · ' + b.jam"></div>
+                                                </div>
+                                                <select class="input-field lap-pax-arah"
+                                                        :value="b.arah"
+                                                        @change="setArah(b, $event.target.value)">
+                                                    <option value="berangkat">Berangkat</option>
+                                                    <option value="pulang">Pulang</option>
+                                                </select>
+                                            </div>
+                                            <div class="lap-pax-ticket" x-text="fmtTicket(b) + ' · ' + b.jumlah_kursi + ' Penumpang'"></div>
+                                            <div class="lap-pax-fee">
+                                                <label>Fee Agen</label>
+                                                <input type="number" min="0" step="1000" inputmode="numeric"
+                                                       x-model.number="b.fee_agen" @input="recalc()">
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- PULANG -->
+                            <div>
+                                <div class="admin-modal-section">Pulang <span class="font-normal normal-case tracking-normal text-slate-400" x-text="'· ' + pulang.length + ' booking'"></span></div>
+                                <div class="lap-pax-list" x-show="pulang.length === 0">
+                                    <div class="lap-pax-empty">Tidak ada booking pulang.</div>
+                                </div>
+                                <div class="lap-pax-list" x-show="pulang.length > 0">
+                                    <template x-for="b in pulang" :key="'p'+b.booking_id">
+                                        <div class="lap-pax-card">
+                                            <div class="lap-pax-top">
+                                                <div class="min-w-0">
+                                                    <div class="lap-pax-name" x-text="b.nama"></div>
+                                                    <div class="lap-pax-meta" x-text="'#MT-' + b.booking_id + ' · ' + b.jam"></div>
+                                                </div>
+                                                <select class="input-field lap-pax-arah"
+                                                        :value="b.arah"
+                                                        @change="setArah(b, $event.target.value)">
+                                                    <option value="berangkat">Berangkat</option>
+                                                    <option value="pulang">Pulang</option>
+                                                </select>
+                                            </div>
+                                            <div class="lap-pax-ticket" x-text="fmtTicket(b) + ' · ' + b.jumlah_kursi + ' Penumpang'"></div>
+                                            <div class="lap-pax-fee">
+                                                <label>Fee Agen</label>
+                                                <input type="number" min="0" step="1000" inputmode="numeric"
+                                                       x-model.number="b.fee_agen" @input="recalc()">
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- RINGKASAN + OPS -->
+                            <div class="lap-settle-box">
+                                <div class="lap-settle-row">
+                                    <span>Dari berangkat</span>
+                                    <b x-text="rupiah(totalBerangkat)"></b>
+                                </div>
+                                <div class="lap-settle-row">
+                                    <span>Dari pulang</span>
+                                    <b x-text="rupiah(totalPulang)"></b>
+                                </div>
+                                <div class="lap-settle-row is-strong">
+                                    <span>Total pendapatan</span>
+                                    <b x-text="rupiah(totalPendapatan)"></b>
+                                </div>
+                                <div class="lap-settle-row text-slate-500">
+                                    <span>Total fee agen (info)</span>
+                                    <b x-text="rupiah(totalFeeAgen)"></b>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="admin-modal-section">Kurangi operasional</div>
+                                <div class="lap-ops-grid">
+                                    <div>
+                                        <label class="form-label">BBM</label>
+                                        <input type="number" min="0" step="1000" inputmode="numeric" class="input-field" x-model.number="bbm" @input="recalc()">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Toll</label>
+                                        <input type="number" min="0" step="1000" inputmode="numeric" class="input-field" x-model.number="toll" @input="recalc()">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Fee</label>
+                                        <input type="number" min="0" step="1000" inputmode="numeric" class="input-field" x-model.number="fee_ops" @input="recalc()">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Lainnya</label>
+                                        <input type="number" min="0" step="1000" inputmode="numeric" class="input-field" x-model.number="ops_lain" @input="recalc()">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="lap-settle-box is-final">
+                                <div class="lap-settle-row">
+                                    <span>Total operasional</span>
+                                    <b x-text="rupiah(totalOps)"></b>
+                                </div>
+                                <div class="lap-settle-row is-strong">
+                                    <span>Net (pendapatan − ops)</span>
+                                    <b x-text="rupiah(net)"></b>
+                                </div>
+                                <div class="lap-settle-row">
+                                    <span>Hasil driver (30%)</span>
+                                    <b x-text="rupiah(hasilDriver)"></b>
+                                </div>
+                                <div class="lap-settle-row is-setoran">
+                                    <span>Sisa setoran</span>
+                                    <b x-text="rupiah(sisaSetoran)"></b>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="form-label">Catatan</label>
+                                <textarea class="input-field resize-none" rows="2" x-model="notes" placeholder="Opsional"></textarea>
+                            </div>
+
+                            <div class="lap-share-bar">
+                                <button type="button" class="btn-secondary lap-share-btn" :disabled="loading || !!error" @click="copySummary()">
+                                    <i class="fa-regular" :class="copied ? 'fa-circle-check' : 'fa-copy'"></i>
+                                    <span x-text="copied ? 'Tersalin!' : 'Salin teks'"></span>
+                                </button>
+                                <button type="button" class="btn-secondary lap-share-btn" :disabled="loading || !!error" @click="downloadSummary()">
+                                    <i class="fa-solid fa-download"></i> Download .txt
+                                </button>
+                                <a class="btn-success lap-share-btn" :href="waShareUrl()" target="_blank" rel="noopener"
+                                   @click="if (!canShare()) { $event.preventDefault(); }">
+                                    <i class="fa-brands fa-whatsapp"></i> Kirim WA
+                                </a>
+                            </div>
+
+                            <div x-show="saveMsg" class="text-sm font-semibold" :class="saveOk ? 'text-emerald-700' : 'text-red-600'" x-text="saveMsg"></div>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="admin-modal-foot lap-settle-foot">
+                    <button type="button" @click="close()" class="btn-secondary">Tutup</button>
+                    <button type="button" class="btn-primary" :disabled="loading || saving || !!error" @click="save()">
+                        <i class="fa-solid" :class="saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'"></i>
+                        <span x-text="saving ? 'Menyimpan…' : 'Simpan setoran'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>
+
+<script>
+function modalSetoranData() {
+    const API = <?= json_encode(BASE_URL . '/admin/proses_laporan_detail.php', JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+    const CSRF = <?= json_encode($csrf, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+    const SITE = <?= json_encode(SITE_NAME, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+
+    return {
+        show: false,
+        loading: false,
+        saving: false,
+        error: '',
+        saveMsg: '',
+        saveOk: false,
+        copied: false,
+        tanggal: '',
+        tanggalId: '',
+        hari: '',
+        csrf: CSRF,
+        driver_name: '',
+        bbm: 0,
+        toll: 0,
+        fee_ops: 0,
+        ops_lain: 0,
+        notes: '',
+        bookings: [],
+        totalBerangkat: 0,
+        totalPulang: 0,
+        totalPendapatan: 0,
+        totalFeeAgen: 0,
+        totalOps: 0,
+        net: 0,
+        hasilDriver: 0,
+        sisaSetoran: 0,
+
+        get berangkat() {
+            return this.bookings.filter(b => b.arah === 'berangkat');
+        },
+        get pulang() {
+            return this.bookings.filter(b => b.arah === 'pulang');
+        },
+
+        rupiah(n) {
+            const v = parseInt(n || 0, 10);
+            const sign = v < 0 ? '-' : '';
+            return 'Rp ' + sign + Math.abs(v).toLocaleString('id-ID');
+        },
+        fmtTicket(b) {
+            const h = parseInt(b.harga_satuan || 0, 10);
+            const k = parseInt(b.jumlah_kursi || 1, 10);
+            return h.toLocaleString('id-ID') + ' × ' + k + 'Pnp';
+        },
+        setArah(b, arah) {
+            b.arah = arah === 'pulang' ? 'pulang' : 'berangkat';
+            this.bookings = this.bookings.slice();
+            this.recalc();
+        },
+        recalc() {
+            let tb = 0, tp = 0, fee = 0;
+            this.bookings.forEach(b => {
+                const tot = parseInt(b.total_harga || 0, 10);
+                fee += Math.max(0, parseInt(b.fee_agen || 0, 10));
+                if (b.arah === 'pulang') tp += tot;
+                else tb += tot;
+            });
+            this.totalBerangkat = tb;
+            this.totalPulang = tp;
+            this.totalPendapatan = tb + tp;
+            this.totalFeeAgen = fee;
+            const ops = Math.max(0, parseInt(this.bbm || 0, 10))
+                + Math.max(0, parseInt(this.toll || 0, 10))
+                + Math.max(0, parseInt(this.fee_ops || 0, 10))
+                + Math.max(0, parseInt(this.ops_lain || 0, 10));
+            this.totalOps = ops;
+            this.net = this.totalPendapatan - ops;
+            this.hasilDriver = Math.round(this.net * 0.3);
+            this.sisaSetoran = this.net - this.hasilDriver;
+        },
+        linesFor(arah) {
+            return this.bookings.filter(b => b.arah === arah).map(b => {
+                const fee = Math.max(0, parseInt(b.fee_agen || 0, 10));
+                return '- ' + b.nama + ' · ' + this.fmtTicket(b)
+                    + ' · ' + b.jumlah_kursi + ' Pnp'
+                    + (fee > 0 ? ' · Fee agen ' + this.rupiah(fee) : '');
+            });
+        },
+        buildShareText() {
+            const driver = (this.driver_name || '').trim() || '-';
+            const tgl = ((this.hari || '') + (this.tanggalId ? ', ' + this.tanggalId : '')).trim() || this.tanggal;
+            const br = this.linesFor('berangkat');
+            const pl = this.linesFor('pulang');
+            const opsParts = [];
+            if (parseInt(this.bbm || 0, 10) > 0) opsParts.push('BBM ' + this.rupiah(this.bbm));
+            if (parseInt(this.toll || 0, 10) > 0) opsParts.push('Toll ' + this.rupiah(this.toll));
+            if (parseInt(this.fee_ops || 0, 10) > 0) opsParts.push('Fee ' + this.rupiah(this.fee_ops));
+            if (parseInt(this.ops_lain || 0, 10) > 0) opsParts.push('Lainnya ' + this.rupiah(this.ops_lain));
+
+            let txt = '';
+            txt += '*SETORAN 1 PP — ' + SITE + '*\n';
+            txt += 'Driver: ' + driver + '\n';
+            txt += 'Tanggal: ' + tgl + '\n\n';
+            txt += '*BERANGKAT* (' + br.length + ')\n';
+            txt += (br.length ? br.join('\n') : '- (kosong)') + '\n';
+            txt += 'Subtotal: ' + this.rupiah(this.totalBerangkat) + '\n\n';
+            txt += '*PULANG* (' + pl.length + ')\n';
+            txt += (pl.length ? pl.join('\n') : '- (kosong)') + '\n';
+            txt += 'Subtotal: ' + this.rupiah(this.totalPulang) + '\n\n';
+            txt += 'Total pendapatan: ' + this.rupiah(this.totalPendapatan) + '\n';
+            if (this.totalFeeAgen > 0) txt += 'Total fee agen: ' + this.rupiah(this.totalFeeAgen) + '\n';
+            txt += 'Operasional' + (opsParts.length ? ' (' + opsParts.join(' + ') + ')' : '') + ': ' + this.rupiah(this.totalOps) + '\n';
+            txt += 'Net: ' + this.rupiah(this.net) + '\n';
+            txt += 'Bagian driver 30%: ' + this.rupiah(this.hasilDriver) + '\n';
+            txt += 'Sisa setoran: ' + this.rupiah(this.sisaSetoran) + '\n';
+            if ((this.notes || '').trim()) txt += '\nCatatan: ' + this.notes.trim() + '\n';
+            return txt.trim() + '\n';
+        },
+        canShare() {
+            return !this.loading && !this.error && !!this.tanggal;
+        },
+        waShareUrl() {
+            if (!this.canShare()) return '#';
+            return 'https://wa.me/?text=' + encodeURIComponent(this.buildShareText());
+        },
+        async copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return;
+            }
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        },
+        async copySummary() {
+            if (!this.canShare()) return;
+            try {
+                await this.copyToClipboard(this.buildShareText());
+                this.copied = true;
+                this.saveOk = true;
+                this.saveMsg = 'Ringkasan tersalin. Tempel di WhatsApp driver.';
+                setTimeout(() => { this.copied = false; }, 2000);
+            } catch (e) {
+                this.saveOk = false;
+                this.saveMsg = 'Gagal menyalin. Coba Download .txt.';
+            }
+        },
+        downloadSummary() {
+            if (!this.canShare()) return;
+            const blob = new Blob([this.buildShareText()], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const safeTgl = (this.tanggal || 'setoran').replace(/[^\d-]/g, '');
+            a.href = url;
+            a.download = 'Setoran_' + safeTgl + '_Mustika_Travel.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            this.saveOk = true;
+            this.saveMsg = 'File .txt siap diunduh.';
+        },
+        applyPayload(data) {
+            this.hari = data.hari || '';
+            this.tanggalId = data.tanggal_id || data.tanggal || this.tanggal;
+            this.tanggal = data.tanggal || this.tanggal;
+            const s = data.settlement || {};
+            this.driver_name = s.driver_name || '';
+            this.bbm = parseInt(s.bbm || 0, 10);
+            this.toll = parseInt(s.toll || 0, 10);
+            this.fee_ops = parseInt(s.fee_ops || 0, 10);
+            this.ops_lain = parseInt(s.ops_lain || 0, 10);
+            this.notes = s.notes || '';
+            this.bookings = (data.bookings || []).map(b => ({
+                ...b,
+                fee_agen: parseInt(b.fee_agen || 0, 10),
+                arah: b.arah === 'pulang' ? 'pulang' : 'berangkat'
+            }));
+            if (data.csrf) this.csrf = data.csrf;
+            this.recalc();
+        },
+        async fetchTanggal(tanggal) {
+            const res = await fetch(API + '?tanggal=' + encodeURIComponent(tanggal), {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            });
+            const data = await res.json();
+            if (!data.ok) throw new Error(data.error || 'Gagal memuat');
+            return data;
+        },
+        async open(tanggal) {
+            if (!tanggal) return;
+            this.show = true;
+            this.loading = true;
+            this.error = '';
+            this.saveMsg = '';
+            this.copied = false;
+            this.tanggal = tanggal;
+            this.bookings = [];
+            document.body.style.overflow = 'hidden';
+            try {
+                const data = await this.fetchTanggal(tanggal);
+                this.applyPayload(data);
+            } catch (e) {
+                this.error = e.message || 'Gagal memuat data.';
+            } finally {
+                this.loading = false;
+            }
+        },
+        async copyTanggal(tanggal) {
+            try {
+                const data = await this.fetchTanggal(tanggal);
+                // temporary apply without opening modal
+                const prev = {
+                    show: this.show,
+                    tanggal: this.tanggal,
+                    tanggalId: this.tanggalId,
+                    hari: this.hari,
+                    driver_name: this.driver_name,
+                    bbm: this.bbm,
+                    toll: this.toll,
+                    fee_ops: this.fee_ops,
+                    ops_lain: this.ops_lain,
+                    notes: this.notes,
+                    bookings: this.bookings,
+                    csrf: this.csrf
+                };
+                this.applyPayload(data);
+                await this.copyToClipboard(this.buildShareText());
+                if (!prev.show) {
+                    this.tanggal = prev.tanggal;
+                    this.tanggalId = prev.tanggalId;
+                    this.hari = prev.hari;
+                    this.driver_name = prev.driver_name;
+                    this.bbm = prev.bbm;
+                    this.toll = prev.toll;
+                    this.fee_ops = prev.fee_ops;
+                    this.ops_lain = prev.ops_lain;
+                    this.notes = prev.notes;
+                    this.bookings = prev.bookings;
+                    this.csrf = prev.csrf;
+                    this.recalc();
+                }
+                alert('Ringkasan setoran ' + (data.tanggal_id || tanggal) + ' tersalin. Tempel di WhatsApp.');
+            } catch (e) {
+                alert(e.message || 'Gagal menyalin ringkasan.');
+            }
+        },
+        close() {
+            this.show = false;
+            document.body.style.overflow = '';
+        },
+        async save() {
+            if (this.saving || this.loading) return;
+            this.saving = true;
+            this.saveMsg = '';
+            try {
+                const payload = {
+                    csrf_token: this.csrf,
+                    tanggal: this.tanggal,
+                    driver_name: this.driver_name,
+                    bbm: parseInt(this.bbm || 0, 10),
+                    toll: parseInt(this.toll || 0, 10),
+                    fee_ops: parseInt(this.fee_ops || 0, 10),
+                    ops_lain: parseInt(this.ops_lain || 0, 10),
+                    notes: this.notes,
+                    fees: this.bookings.map(b => ({
+                        booking_id: b.booking_id,
+                        fee_agen: parseInt(b.fee_agen || 0, 10),
+                        arah: b.arah === 'pulang' ? 'pulang' : 'berangkat'
+                    }))
+                };
+                const res = await fetch(API, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.error || 'Gagal menyimpan');
+                if (data.csrf) this.csrf = data.csrf;
+                this.saveOk = true;
+                this.saveMsg = data.message || 'Tersimpan.';
+            } catch (e) {
+                this.saveOk = false;
+                this.saveMsg = e.message || 'Gagal menyimpan.';
+            } finally {
+                this.saving = false;
+            }
+        }
+    };
+}
+
+document.addEventListener('click', function (e) {
+    const copyBtn = e.target.closest('.js-lap-copy');
+    if (copyBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const tgl = copyBtn.getAttribute('data-tanggal');
+        if (tgl && window.modalSetoran) window.modalSetoran.copyTanggal(tgl);
+        return;
+    }
+    const row = e.target.closest('tr.lap-row-clickable');
+    if (!row || !window.modalSetoran) return;
+    const tgl = row.getAttribute('data-tanggal');
+    if (tgl) window.modalSetoran.open(tgl);
+});
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const row = e.target.closest && e.target.closest('tr.lap-row-clickable');
+    if (!row || !window.modalSetoran) return;
+    if (e.target.closest && e.target.closest('.js-lap-copy')) return;
+    e.preventDefault();
+    const tgl = row.getAttribute('data-tanggal');
+    if (tgl) window.modalSetoran.open(tgl);
+});
+</script>
 
 <?php require_once __DIR__ . '/includes/admin_footer.php'; ?>

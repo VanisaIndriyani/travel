@@ -109,3 +109,54 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Set timezone ke Asia/Jakarta
 date_default_timezone_set('Asia/Jakarta');
+
+// =============================================
+// 9. AI / OpenAI-compatible (opsional — Impor dari WA)
+// Tanpa key: parser rule-based tetap jalan (tempel teks chat).
+// Dengan key: ekstraksi lebih akurat; screenshot butuh model vision.
+// Set di file .env di root project (jangan commit key):
+//   OPENAI_API_KEY=sk-...   (atau AI_API_KEY=...)
+//   AI_BASE_URL=https://api.openai.com/v1   (opsional)
+//   AI_MODEL=gpt-4o-mini                    (opsional)
+// =============================================
+if (!function_exists('mustika_load_dotenv')) {
+    function mustika_load_dotenv(string $path): void
+    {
+        if (!is_file($path) || !is_readable($path)) return;
+        $lines = file($path, FILE_IGNORE_NEW_LINES);
+        if ($lines === false) return;
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '' || $line[0] === '#') continue;
+            if (strpos($line, '=') === false) continue;
+            [$name, $value] = explode('=', $line, 2);
+            $name = trim($name);
+            $value = trim($value);
+            if ($name === '') continue;
+            if (
+                (str_starts_with($value, '"') && str_ends_with($value, '"'))
+                || (str_starts_with($value, "'") && str_ends_with($value, "'"))
+            ) {
+                $value = substr($value, 1, -1);
+            }
+            if (getenv($name) === false) {
+                putenv("{$name}={$value}");
+                $_ENV[$name] = $value;
+            }
+        }
+    }
+}
+mustika_load_dotenv(dirname(__DIR__) . '/.env');
+
+if (!defined('OPENAI_API_KEY')) {
+    $aiKey = (string)(getenv('OPENAI_API_KEY') ?: getenv('AI_API_KEY') ?: '');
+    define('OPENAI_API_KEY', $aiKey);
+}
+if (!defined('AI_BASE_URL')) {
+    $aiBase = (string)(getenv('AI_BASE_URL') ?: 'https://api.openai.com/v1');
+    define('AI_BASE_URL', rtrim($aiBase, '/'));
+}
+if (!defined('AI_MODEL')) {
+    $aiModel = (string)(getenv('AI_MODEL') ?: 'gpt-4o-mini');
+    define('AI_MODEL', $aiModel !== '' ? $aiModel : 'gpt-4o-mini');
+}

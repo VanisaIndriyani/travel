@@ -665,3 +665,72 @@ function infer_lokasi_from_jadwal(string $jadwal): string
     }
     return 'Blora';
 }
+
+/**
+ * Infer arah perjalanan dari lokasi/jadwal booking.
+ * Blora (dan default) = berangkat; Surabaya/Sidoarjo = pulang.
+ */
+function infer_arah_booking(array $b): string
+{
+    $lok = strtolower(trim((string)($b['lokasi_jemput'] ?? '')));
+    if ($lok === 'surabaya' || $lok === 'sidoarjo') {
+        return 'pulang';
+    }
+    if ($lok === 'blora') {
+        return 'berangkat';
+    }
+    $jadwal = (string)($b['jadwal_jemput'] ?? '');
+    if ($jadwal !== '' && infer_lokasi_from_jadwal($jadwal) === 'Surabaya') {
+        return 'pulang';
+    }
+    return 'berangkat';
+}
+
+/**
+ * Pastikan tabel setoran harian ada (auto-create jika belum).
+ */
+function ensure_laporan_settlement_tables(): bool
+{
+    global $pdo;
+    if (empty($pdo)) return false;
+    static $ok = null;
+    if ($ok === true) return true;
+    try {
+        $cek = $pdo->query("SHOW TABLES LIKE 'laporan_harian'")->fetchColumn();
+        if (!$cek) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `laporan_harian` (
+              `id` INT AUTO_INCREMENT PRIMARY KEY,
+              `tanggal` DATE NOT NULL,
+              `driver_name` VARCHAR(120) NOT NULL DEFAULT '',
+              `bbm` INT NOT NULL DEFAULT 0,
+              `toll` INT NOT NULL DEFAULT 0,
+              `fee_ops` INT NOT NULL DEFAULT 0,
+              `ops_lain` INT NOT NULL DEFAULT 0,
+              `notes` TEXT NULL,
+              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              UNIQUE KEY `unik_tanggal` (`tanggal`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+        $cek2 = $pdo->query("SHOW TABLES LIKE 'laporan_fee_agen'")->fetchColumn();
+        if (!$cek2) {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `laporan_fee_agen` (
+              `id` INT AUTO_INCREMENT PRIMARY KEY,
+              `tanggal` DATE NOT NULL,
+              `booking_id` INT NOT NULL,
+              `fee_agen` INT NOT NULL DEFAULT 0,
+              `arah` ENUM('berangkat','pulang') NOT NULL DEFAULT 'berangkat',
+              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              UNIQUE KEY `unik_tgl_booking` (`tanggal`, `booking_id`),
+              INDEX `idx_tanggal` (`tanggal`),
+              INDEX `idx_booking` (`booking_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+        $ok = true;
+        return true;
+    } catch (Throwable $e) {
+        $ok = false;
+        return false;
+    }
+}

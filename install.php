@@ -133,6 +133,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['install'])) {
           INDEX `idx_urutan` (`urutan`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
         $pdo_root->exec($sqlCarters);
+
+        // Tabel setoran harian (driver + operasional + fee agen)
+        try {
+            $pdo_root->exec("CREATE TABLE IF NOT EXISTS `laporan_harian` (
+              `id` INT AUTO_INCREMENT PRIMARY KEY,
+              `tanggal` DATE NOT NULL,
+              `driver_name` VARCHAR(120) NOT NULL DEFAULT '',
+              `bbm` INT NOT NULL DEFAULT 0,
+              `toll` INT NOT NULL DEFAULT 0,
+              `fee_ops` INT NOT NULL DEFAULT 0,
+              `ops_lain` INT NOT NULL DEFAULT 0,
+              `notes` TEXT NULL,
+              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              UNIQUE KEY `unik_tanggal` (`tanggal`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $pdo_root->exec("CREATE TABLE IF NOT EXISTS `laporan_fee_agen` (
+              `id` INT AUTO_INCREMENT PRIMARY KEY,
+              `tanggal` DATE NOT NULL,
+              `booking_id` INT NOT NULL,
+              `fee_agen` INT NOT NULL DEFAULT 0,
+              `arah` ENUM('berangkat','pulang') NOT NULL DEFAULT 'berangkat',
+              `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              UNIQUE KEY `unik_tgl_booking` (`tanggal`, `booking_id`),
+              INDEX `idx_tanggal` (`tanggal`),
+              INDEX `idx_booking` (`booking_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $msg .= "<br>✅ Tabel `laporan_harian` & `laporan_fee_agen` siap.";
+        } catch (Exception $e) {}
+
         $cekCarters = (int)$pdo_root->query("SELECT COUNT(*) FROM carters")->fetchColumn();
         if ($cekCarters === 0) {
             $seedCarters = [
