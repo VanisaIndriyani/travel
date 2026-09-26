@@ -90,6 +90,7 @@ global $DAFTAR_JURUSAN;
                     <?php
                     $links = [
                         [BASE_URL,'Beranda'],[BASE_URL . '/#jurusan','Jurusan'],
+                        [BASE_URL . '/#jadwal','Jadwal'],
                         [BASE_URL . '/booking.php','Pemesanan'],[BASE_URL . '/#layanan','Layanan'],
                         [BASE_URL . '/#armada','Armada'],[BASE_URL . '/#carter','Carter'],
                         [BASE_URL . '/#kontak','Kontak']
@@ -160,7 +161,7 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
     const links = document.querySelectorAll('[data-nav]');
     if (!links.length) return;
 
-    const sectionIds = ['beranda', 'jurusan', 'layanan', 'armada', 'carter', 'kontak'];
+    const sectionIds = ['beranda', 'jurusan', 'jadwal', 'layanan', 'armada', 'carter', 'kontak'];
     const path = (location.pathname || '').replace(/\/+$/, '');
     const isBooking = /booking\.php$/i.test(path);
 

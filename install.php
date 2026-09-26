@@ -87,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['install'])) {
           `nama` VARCHAR(150) NOT NULL,
           `no_hp` VARCHAR(20) NOT NULL,
           `alamat_jemput` TEXT NOT NULL,
+          `maps_link` VARCHAR(500) NULL DEFAULT NULL,
           `alamat_tujuan` TEXT NOT NULL,
           `jumlah_kursi` INT NOT NULL DEFAULT 1,
           `tanggal_berangkat` DATE NOT NULL,
@@ -110,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['install'])) {
         try { $pdo_root->exec("ALTER TABLE `bookings` ADD COLUMN `id_rute` INT NULL FIRST"); } catch (Exception $e) {}
         try { $pdo_root->exec("ALTER TABLE `bookings` ADD COLUMN `rute` VARCHAR(200) NOT NULL DEFAULT '' AFTER `id_rute`"); } catch (Exception $e) {}
         try { $pdo_root->exec("ALTER TABLE `bookings` ADD COLUMN `harga_rute_saat_booking` INT NOT NULL DEFAULT 0 AFTER `rute`"); } catch (Exception $e) {}
+        try { $pdo_root->exec("ALTER TABLE `bookings` ADD COLUMN `maps_link` VARCHAR(500) NULL DEFAULT NULL COMMENT 'Link Google Maps pin lokasi jemput (opsional)' AFTER `alamat_jemput`"); } catch (Exception $e) {}
 
         $msg .= "<br>✅ Tabel `bookings` siap + kolom id_rute & rute & harga_saat_booking ditambahkan.";
 

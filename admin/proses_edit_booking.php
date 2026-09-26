@@ -33,6 +33,7 @@ if (!in_array($lokasi_jemput, $lokValid)) {
 }
 $jadwal_jemput = trim($_POST['jadwal_jemput'] ?? '');
 if (strlen($jadwal_jemput) > 255) $jadwal_jemput = substr($jadwal_jemput,0,255);
+$maps_link = sanitize_maps_link($_POST['maps_link'] ?? '');
 
 if (strlen($jam_jemput) === 5) $jam_jemput .= ':00';
 
@@ -55,24 +56,46 @@ if ($total_harga <= 0) {
 }
 
 try {
-    $sql = "UPDATE bookings SET
-        nama = ?, no_hp = ?, alamat_jemput = ?, alamat_tujuan = ?,
-        jumlah_kursi = ?, tanggal_berangkat = ?, jam_jemput = ?,
-        barang_bawaan = ?, total_harga = ?, status = ?, source = ?,
-        catatan_admin = ?, updated_at = NOW(),
-        id_rute = ?, rute = ?, harga_rute_saat_booking = ?,
-        lokasi_jemput = ?, jadwal_jemput = ?
-        WHERE id = ?";
-    $stmt = $pdo->prepare($sql);
-    $ok = $stmt->execute([
-        $nama, $no_hp, $alamat_jemput, $alamat_tujuan,
-        $jumlah_kursi, $tanggal_berangkat, $jam_jemput,
-        $barang_bawaan, $total_harga, $status, $source,
-        $catatan_admin,
-        $id_rute_final, $nama_rute_final, $harga_rute_final,
-        $lokasi_jemput, $jadwal_jemput,
-        $id
-    ]);
+    $hasMapsCol = ensure_bookings_maps_link_column();
+    if ($hasMapsCol) {
+        $sql = "UPDATE bookings SET
+            nama = ?, no_hp = ?, alamat_jemput = ?, maps_link = ?, alamat_tujuan = ?,
+            jumlah_kursi = ?, tanggal_berangkat = ?, jam_jemput = ?,
+            barang_bawaan = ?, total_harga = ?, status = ?, source = ?,
+            catatan_admin = ?, updated_at = NOW(),
+            id_rute = ?, rute = ?, harga_rute_saat_booking = ?,
+            lokasi_jemput = ?, jadwal_jemput = ?
+            WHERE id = ?";
+        $stmt = $pdo->prepare($sql);
+        $ok = $stmt->execute([
+            $nama, $no_hp, $alamat_jemput, ($maps_link !== '' ? $maps_link : null), $alamat_tujuan,
+            $jumlah_kursi, $tanggal_berangkat, $jam_jemput,
+            $barang_bawaan, $total_harga, $status, $source,
+            $catatan_admin,
+            $id_rute_final, $nama_rute_final, $harga_rute_final,
+            $lokasi_jemput, $jadwal_jemput,
+            $id
+        ]);
+    } else {
+        $sql = "UPDATE bookings SET
+            nama = ?, no_hp = ?, alamat_jemput = ?, alamat_tujuan = ?,
+            jumlah_kursi = ?, tanggal_berangkat = ?, jam_jemput = ?,
+            barang_bawaan = ?, total_harga = ?, status = ?, source = ?,
+            catatan_admin = ?, updated_at = NOW(),
+            id_rute = ?, rute = ?, harga_rute_saat_booking = ?,
+            lokasi_jemput = ?, jadwal_jemput = ?
+            WHERE id = ?";
+        $stmt = $pdo->prepare($sql);
+        $ok = $stmt->execute([
+            $nama, $no_hp, $alamat_jemput, $alamat_tujuan,
+            $jumlah_kursi, $tanggal_berangkat, $jam_jemput,
+            $barang_bawaan, $total_harga, $status, $source,
+            $catatan_admin,
+            $id_rute_final, $nama_rute_final, $harga_rute_final,
+            $lokasi_jemput, $jadwal_jemput,
+            $id
+        ]);
+    }
     if ($ok) set_flash('success', "✅ Booking #MT-{$id} berhasil diperbarui!" . ($lokasi_jemput ? " 📍".e($lokasi_jemput) : ''));
     else set_flash('error', 'Gagal update booking.');
 } catch (PDOException $e) {

@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS `bookings` (
   `nama`             VARCHAR(150) NOT NULL COMMENT 'Nama Lengkap Penumpang',
   `no_hp`            VARCHAR(20)  NOT NULL COMMENT 'Nomor HP / WhatsApp',
   `alamat_jemput`    TEXT         NOT NULL COMMENT 'Alamat Penjemputan Lengkap',
+  `maps_link`        VARCHAR(500) NULL DEFAULT NULL COMMENT 'Link Google Maps pin lokasi jemput (opsional)',
   `alamat_tujuan`    TEXT         NOT NULL COMMENT 'Alamat Tujuan Lengkap',
   `jumlah_kursi`     INT          NOT NULL DEFAULT 1 COMMENT 'Jumlah Seat / Penumpang',
   `tanggal_berangkat`DATE         NOT NULL COMMENT 'Hari & Tanggal Keberangkatan',

@@ -127,8 +127,10 @@ $ruteAwal      = $listRuteAktif[0] ?? ['id' => 0, 'nama_rute' => 'Custom', 'harg
 
             <form action="<?= BASE_URL ?>/process_booking.php" method="POST" class="space-y-5 md:space-y-6 relative z-10" novalidate
                   x-data="formJadwal()"
-                  x-init="initLokasi('<?= e(old('lokasi_jemput')?:'Blora') ?>','<?= e(old('jadwal_jemput')?:'') ?>')">
+                  x-init="initLokasi('<?= e(old('lokasi_jemput')?:'Blora') ?>','<?= e(old('jadwal_jemput')?:'') ?>','<?= e(old('maps_link')?:'') ?>')">
                 <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+                <input type="hidden" name="lokasi_jemput" :value="lokasi">
+                <input type="hidden" name="maps_link" :value="mapsLink">
 
                 <div class="flex flex-wrap items-center gap-3 mb-3 p-4 md:p-5 rounded-2xl bg-cream-50 border border-gold-200/70">
                     <div class="flex items-center gap-2 text-navy-800 bg-white border border-gold-200 px-4 py-2.5 rounded-xl text-xs md:text-sm font-medium">
@@ -165,7 +167,7 @@ $ruteAwal      = $listRuteAktif[0] ?? ['id' => 0, 'nama_rute' => 'Custom', 'harg
                             <i class="fa-solid fa-house-chimney text-gold-600 mr-1.5"></i> Alamat Penjemputan <span class="text-red-500">*</span>
                         </label>
                         <textarea id="alamat_jemput" name="alamat_jemput" required rows="2"
-                                  placeholder="Contoh: Jl. Raya Blora-Semarang No.123, RT 02/RW 04, Blora, Jawa Tengah"
+                                  placeholder="Contoh: Jl. Pemuda No.12, RT 02/RW 04, Blora, Jawa Tengah"
                                   class="input-field resize-none"><?= e(old('alamat_jemput')) ?></textarea>
                     </div>
                     <!-- Alamat Tujuan -->
@@ -174,7 +176,7 @@ $ruteAwal      = $listRuteAktif[0] ?? ['id' => 0, 'nama_rute' => 'Custom', 'harg
                             <i class="fa-solid fa-location-dot text-gold-600 mr-1.5"></i> Alamat Tujuan <span class="text-red-500">*</span>
                         </label>
                         <textarea id="alamat_tujuan" name="alamat_tujuan" required rows="2"
-                                  placeholder="Contoh: Jl. Pahlawan No.45, Semarang Tengah, Kota Semarang (depan SD Negeri 1)"
+                                  placeholder="Contoh: Jl. Ahmad Yani No.45, Kota tujuan (depan toko / landmark)"
                                   class="input-field resize-none"><?= e(old('alamat_tujuan')) ?></textarea>
                     </div>
                     <!-- Pilih Rute Perjalanan -->
@@ -232,61 +234,103 @@ $ruteAwal      = $listRuteAktif[0] ?? ['id' => 0, 'nama_rute' => 'Custom', 'harg
                                min="<?= date('Y-m-d') ?>"
                                class="input-field">
                     </div>
-                    <!-- Lokasi Asal Penjemputan -->
+                    <!-- Pin lokasi di Maps (OPSIONAL) -->
                     <div class="md:col-span-2">
                         <label class="form-label">
-                            <i class="fa-solid fa-location-crosshairs text-gold-600 mr-1.5"></i> Lokasi Asal Penjemputan <span class="text-red-500">*</span>
+                            <i class="fa-solid fa-map-location-dot text-gold-600 mr-1.5"></i>
+                            Pin lokasi di Maps
+                            <span class="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[10px] font-bold uppercase tracking-wide text-slate-500">Opsional</span>
                         </label>
-                        <div class="grid grid-cols-2 gap-2 md:gap-3">
-                            <label class="relative cursor-pointer group">
-                                <input type="radio" name="lokasi_jemput" value="Blora" x-model="lokasi" required class="peer sr-only">
-                                <div class="p-3.5 rounded-2xl border border-cream-200 bg-cream-50 text-navy-800 font-semibold group-hover:border-gold-400/60 transition peer-checked:bg-navy-900 peer-checked:border-navy-900 peer-checked:text-cream-50">
-                                    <div class="flex items-center justify-center gap-2 text-sm md:text-base">
-                                        <i class="fa-solid fa-map-pin text-amber-500 peer-checked:text-primary-600"></i>
-                                        <span>Kota Blora</span>
-                                    </div>
+                        <p class="text-[11px] md:text-xs text-slate-500 mb-2.5 leading-relaxed">
+                            Bantu driver menemukan titik jemput. Alamat teks di atas tetap wajib — pin Maps hanya tambahan.
+                        </p>
+                        <div class="rounded-2xl border border-cream-200 bg-cream-50/80 p-3.5 md:p-4 space-y-3">
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <button type="button" @click="ambilLokasiSaya()"
+                                        :disabled="geoLoading"
+                                        class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-navy-900 text-cream-50 text-sm font-semibold hover:bg-navy-800 transition disabled:opacity-60">
+                                    <i class="fa-solid" :class="geoLoading ? 'fa-spinner fa-spin' : 'fa-location-crosshairs'"></i>
+                                    <span x-text="geoLoading ? 'Mengambil lokasi…' : 'Ambil lokasi saya'"></span>
+                                </button>
+                                <button type="button" @click="showManualCoords = !showManualCoords"
+                                        class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-cream-200 text-navy-800 text-sm font-semibold hover:border-gold-400/60 transition">
+                                    <i class="fa-solid fa-pen-to-square text-gold-600"></i> Isi lat/lng manual
+                                </button>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600 mb-1" for="maps_paste">Atau tempel link Google Maps</label>
+                                <div class="flex flex-col sm:flex-row gap-2">
+                                    <input type="url" id="maps_paste" x-model="mapsPaste"
+                                           placeholder="https://maps.app.goo.gl/... atau https://www.google.com/maps/..."
+                                           class="input-field flex-1 text-sm">
+                                    <button type="button" @click="applyPaste()"
+                                            class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-white border border-cream-200 text-navy-800 text-sm font-semibold hover:border-gold-400/60 transition shrink-0">
+                                        <i class="fa-solid fa-check text-emerald-600"></i> Pakai link
+                                    </button>
                                 </div>
-                            </label>
-                            <label class="relative cursor-pointer group">
-                                <input type="radio" name="lokasi_jemput" value="Surabaya" x-model="lokasi" required class="peer sr-only">
-                                <div class="p-3.5 rounded-2xl border border-cream-200 bg-cream-50 text-navy-800 font-semibold group-hover:border-gold-400/60 transition peer-checked:bg-navy-900 peer-checked:border-navy-900 peer-checked:text-cream-50">
-                                    <div class="flex items-center justify-center gap-2 text-sm md:text-base">
-                                        <i class="fa-solid fa-anchor text-amber-500 peer-checked:text-emerald-600"></i>
-                                        <span>Surabaya / Sidoarjo</span>
-                                    </div>
+                            </div>
+                            <div x-show="showManualCoords" x-cloak x-transition class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Latitude</label>
+                                    <input type="text" inputmode="decimal" x-model="mapsLat" placeholder="-6.9175" class="input-field text-sm">
                                 </div>
-                            </label>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Longitude</label>
+                                    <input type="text" inputmode="decimal" x-model="mapsLng" placeholder="112.7325" class="input-field text-sm">
+                                </div>
+                                <div class="flex items-end">
+                                    <button type="button" @click="applyCoords()"
+                                            class="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-navy-900 text-cream-50 text-sm font-semibold hover:bg-navy-800 transition">
+                                        <i class="fa-solid fa-link"></i> Buat link
+                                    </button>
+                                </div>
+                            </div>
+                            <p x-show="geoError" x-cloak class="text-[11px] md:text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2" x-text="geoError"></p>
+                            <div x-show="mapsLink" x-cloak x-transition
+                                 class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl bg-white border border-emerald-200">
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-[10px] font-bold uppercase tracking-wide text-emerald-700 mb-0.5">Preview pin</div>
+                                    <a :href="mapsLink" target="_blank" rel="noopener"
+                                       class="text-sm font-semibold text-navy-800 hover:text-gold-600 break-all underline decoration-gold-300/60"
+                                       x-text="mapsLink"></a>
+                                </div>
+                                <div class="flex gap-2 shrink-0">
+                                    <a :href="mapsLink" target="_blank" rel="noopener"
+                                       class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold hover:bg-emerald-100 transition">
+                                        <i class="fa-solid fa-external-link"></i> Buka di Maps
+                                    </a>
+                                    <button type="button" @click="clearMaps()"
+                                            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-bold hover:bg-red-100 transition">
+                                        <i class="fa-solid fa-xmark"></i> Hapus
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <!-- Jadwal Penjemputan DINAMIS Alpine -->
+                    <!-- Jadwal Penjemputan (semua area — area diambil dari jadwal yang dipilih) -->
                     <div class="md:col-span-2">
                         <label class="form-label" for="jadwal_jemput">
                             <i class="fa-solid fa-clock-rotate-left text-gold-600 mr-1.5"></i> Pilih Jadwal Penjemputan <span class="text-red-500">*</span>
                         </label>
                         <select id="jadwal_jemput" name="jadwal_jemput" required x-model="jadwal"
                                 class="input-field font-bold text-slate-800 bg-white">
-                            <template x-if="lokasi === 'Blora'">
-                                <optgroup label="📌 Jadwal Penjemputan Blora">
-                                    <option value="Jam 08.00 - Kota-kota Penjemputan Blora">🌆 Jam 08.00 — Kota-kota Penjemputan (Blora)</option>
-                                    <option value="Jam 11.00 - Door to Door Semua Kecamatan Blora (Unit Hiace)">🚐 Jam 11.00 — Door to Door SEMUA KECAMATAN BLORA (Unit Hiace)</option>
-                                    <option value="Jam 20.00 - Kota-kota Penjemputan Blora">🌙 Jam 20.00 — Kota-kota Penjemputan (Blora)</option>
-                                </optgroup>
-                            </template>
-                            <template x-if="lokasi === 'Surabaya'">
-                                <optgroup label="📌 Jadwal Penjemputan Surabaya / Sidoarjo">
-                                    <option value="Jam 11.00 - Start dari Bandara Juanda (Surabaya)">✈️ Jam 11.00 — Start dari Bandara Juanda (Surabaya)</option>
-                                    <option value="Jam 15.00 - Start dari Bandara Juanda (Surabaya)">✈️ Jam 15.00 — Start dari Bandara Juanda (Surabaya)</option>
-                                    <option value="Jam 20.00 - Start dari Sidoarjo (Door to Door Sidoarjo + Surabaya/Gresik)">🚐 Jam 20.00 — Start dari Sidoarjo (Door to Door Sidoarjo + Surabaya/Gresik)</option>
-                                </optgroup>
-                            </template>
+                            <option value="" disabled>— Pilih jadwal penjemputan —</option>
+                            <optgroup label="📌 Jadwal Penjemputan Blora">
+                                <option value="Jam 08.00 - Kota-kota Penjemputan Blora">🌆 Jam 08.00 — Kota-kota Penjemputan (Blora)</option>
+                                <option value="Jam 11.00 - Door to Door Semua Kecamatan Blora (Unit Hiace)">🚐 Jam 11.00 — Door to Door SEMUA KECAMATAN BLORA (Unit Hiace)</option>
+                                <option value="Jam 20.00 - Kota-kota Penjemputan Blora">🌙 Jam 20.00 — Kota-kota Penjemputan (Blora)</option>
+                            </optgroup>
+                            <optgroup label="📌 Jadwal Penjemputan Surabaya / Sidoarjo">
+                                <option value="Jam 10.00 - Start dari Bandara Juanda (Surabaya)">✈️ Jam 10.00 — Start dari Bandara Juanda (Surabaya)</option>
+                                <option value="Jam 15.00 - Start dari Bandara Juanda (Surabaya)">✈️ Jam 15.00 — Start dari Bandara Juanda (Surabaya)</option>
+                                <option value="Jam 20.00 - Start dari Sidoarjo (Door to Door Sidoarjo + Surabaya/Gresik)">🚐 Jam 20.00 — Start dari Sidoarjo (Door to Door Sidoarjo + Surabaya/Gresik)</option>
+                            </optgroup>
                         </select>
-                        <!-- Info Khusus Jam 11.00 Blora -->
                         <div x-show="lokasi === 'Blora'" x-transition
                              class="flex items-start gap-2 mt-2.5 p-3.5 rounded-2xl bg-cream-50 border border-gold-200 text-[11px] md:text-xs font-medium text-navy-800">
                             <i class="fa-solid fa-circle-info text-amber-600 mt-0.5 shrink-0"></i>
                             <div>💡 <strong>Jam 11.00 khusus D2D:</strong> Penjemputan mencakup <strong>SEMUA KECAMATAN YANG ADA DI BLORA</strong> menggunakan Unit Hiace. Nyaman & langsung antar sampai rumah!</div>
                         </div>
-                        <!-- Info Khusus Surabaya -->
                         <div x-show="lokasi === 'Surabaya'" x-transition
                              class="flex items-start gap-2 mt-2.5 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-[11px] md:text-xs font-bold text-emerald-800">
                             <i class="fa-solid fa-circle-info text-emerald-600 mt-0.5 shrink-0"></i>
@@ -318,6 +362,7 @@ $ruteAwal      = $listRuteAktif[0] ?? ['id' => 0, 'nama_rute' => 'Custom', 'harg
 </section>
 
 <!-- ============ SCRIPT KHUSUS FORM BOOKING ============ -->
+<style>[x-cloak]{display:none!important}</style>
 <script>
 /* Hitung total harga realtime - BERDASARKAN RUTE DIPILIH */
 const HARGA_DEFAULT_FALLBACK = <?= (int)$hargaPerOrg ?>;
@@ -357,21 +402,102 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
     document.addEventListener('DOMContentLoaded', hitungTotal);
     setTimeout(hitungTotal, 100);
 }
-/* Alpine function: Lokasi + Jadwal dinamis penjemputan */
+/* Alpine: jadwal + pin Maps opsional (tanpa Google Maps API key) */
 function formJadwal() {
     return {
         lokasi: 'Blora',
         jadwal: '',
-        initLokasi(defLok, defJad) {
-            this.lokasi = (defLok === 'Surabaya') ? 'Surabaya' : 'Blora';
-            const jadwalDefault = {
-                'Blora': 'Jam 08.00 - Kota-kota Penjemputan Blora',
-                'Surabaya': 'Jam 11.00 - Start dari Bandara Juanda (Surabaya)'
-            };
-            this.jadwal = defJad && defJad.length > 3 ? defJad : (jadwalDefault[this.lokasi] || '');
-            this.$watch('lokasi', () => {
-                this.jadwal = jadwalDefault[this.lokasi] || '';
+        mapsLink: '',
+        mapsPaste: '',
+        mapsLat: '',
+        mapsLng: '',
+        geoLoading: false,
+        geoError: '',
+        showManualCoords: false,
+        initLokasi(defLok, defJad, defMaps) {
+            this.jadwal = defJad && defJad.length > 3 ? defJad : 'Jam 08.00 - Kota-kota Penjemputan Blora';
+            this.lokasi = this.inferLokasi(this.jadwal) || (defLok === 'Surabaya' ? 'Surabaya' : 'Blora');
+            this.mapsLink = defMaps || '';
+            if (this.mapsLink) this.mapsPaste = this.mapsLink;
+            this.$watch('jadwal', (v) => {
+                this.lokasi = this.inferLokasi(v);
             });
+        },
+        inferLokasi(jadwal) {
+            const j = (jadwal || '').toLowerCase();
+            if (j.includes('surabaya') || j.includes('sidoarjo') || j.includes('juanda') || j.includes('gresik')) {
+                return 'Surabaya';
+            }
+            return 'Blora';
+        },
+        isValidMapsUrl(url) {
+            if (!url || typeof url !== 'string') return false;
+            return /^https?:\/\/(www\.)?(google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(url.trim());
+        },
+        setMapsLink(url) {
+            const u = (url || '').trim();
+            if (!this.isValidMapsUrl(u)) {
+                this.geoError = 'Link harus dari Google Maps (maps.google.com / maps.app.goo.gl).';
+                return false;
+            }
+            this.mapsLink = u;
+            this.mapsPaste = u;
+            this.geoError = '';
+            return true;
+        },
+        ambilLokasiSaya() {
+            this.geoError = '';
+            if (!navigator.geolocation) {
+                this.geoError = 'Browser tidak mendukung GPS. Silakan tempel link Maps atau isi lat/lng manual.';
+                this.showManualCoords = true;
+                return;
+            }
+            this.geoLoading = true;
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    this.geoLoading = false;
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    this.mapsLat = String(lat);
+                    this.mapsLng = String(lng);
+                    this.setMapsLink('https://www.google.com/maps?q=' + lat + ',' + lng);
+                },
+                (err) => {
+                    this.geoLoading = false;
+                    this.showManualCoords = true;
+                    if (err && err.code === 1) {
+                        this.geoError = 'Akses lokasi ditolak. Tempel link Google Maps atau isi lat/lng manual di bawah.';
+                    } else {
+                        this.geoError = 'Gagal mengambil lokasi. Tempel link Maps atau isi lat/lng manual.';
+                    }
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+            );
+        },
+        applyPaste() {
+            this.geoError = '';
+            if (!this.setMapsLink(this.mapsPaste)) {
+                if (!(this.mapsPaste || '').trim()) {
+                    this.geoError = 'Tempel link Google Maps terlebih dahulu.';
+                }
+            }
+        },
+        applyCoords() {
+            this.geoError = '';
+            const lat = parseFloat(String(this.mapsLat).replace(',', '.'));
+            const lng = parseFloat(String(this.mapsLng).replace(',', '.'));
+            if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+                this.geoError = 'Latitude / longitude tidak valid.';
+                return;
+            }
+            this.setMapsLink('https://www.google.com/maps?q=' + lat + ',' + lng);
+        },
+        clearMaps() {
+            this.mapsLink = '';
+            this.mapsPaste = '';
+            this.mapsLat = '';
+            this.mapsLng = '';
+            this.geoError = '';
         }
     };
 }

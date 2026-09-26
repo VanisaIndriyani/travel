@@ -215,6 +215,13 @@ $nm = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','Se
                                 <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-black <?= $lokClass ?>">
                                     <i class="fa-solid <?= $lokIcon ?> text-[9px]"></i><?= e($lok) ?>
                                 </span>
+                                <?php if (!empty($b['maps_link'])): ?>
+                                    <div class="mt-1">
+                                        <a href="<?= e($b['maps_link']) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 underline">
+                                            <i class="fa-solid fa-map-location-dot"></i> Maps
+                                        </a>
+                                    </div>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <?php if (!empty($b['jadwal_jemput'])): ?>

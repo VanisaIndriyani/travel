@@ -257,6 +257,7 @@ require_once __DIR__ . '/../config/database.php';
                 $nav = [
                     [BASE_URL,                     'Beranda',  'fa-house',            'beranda'],
                     [BASE_URL . '/#jurusan',       'Jurusan',  'fa-bus',               'jurusan'],
+                    [BASE_URL . '/#jadwal',        'Jadwal',   'fa-clock',             'jadwal'],
                     [BASE_URL . '/booking.php',    'Pemesanan','fa-calendar-check',    'pemesanan'],
                     [BASE_URL . '/#layanan',       'Layanan',  'fa-shield-halved',     'layanan'],
                     [BASE_URL . '/#armada',        'Armada',   'fa-van-shuttle',       'armada'],

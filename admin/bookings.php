@@ -3,6 +3,7 @@
 // ADMIN - DATA BOOKINGS (LIST + FILTER + MODAL TAMBAH & EDIT)
 // =============================================
 require_once __DIR__ . '/includes/auth_check.php';
+ensure_bookings_maps_link_column();
 $active_menu = 'bookings';
 $page_title  = 'Data Booking';
 require_once __DIR__ . '/includes/admin_header.php';
@@ -175,6 +176,13 @@ $lokOpsis = [
                         <div><?= tgl_id($b['tanggal_berangkat']) ?> · <?= substr($b['jam_jemput'],0,5) ?></div>
                         <div class="font-semibold text-navy-800 truncate"><?= !empty($b['rute']) ? e($b['rute']) : 'Rute custom' ?></div>
                         <div class="font-extrabold text-navy-900"><?= rupiah($b['total_harga']) ?></div>
+                        <?php if (!empty($b['maps_link'])): ?>
+                            <div>
+                                <a href="<?= e($b['maps_link']) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 underline">
+                                    <i class="fa-solid fa-map-location-dot"></i> Buka di Maps
+                                </a>
+                            </div>
+                        <?php endif; ?>
                     </div>
                     <div class="flex flex-wrap gap-1 mt-2">
                         <button type="button" onclick="window.modalDetail.open(<?= $b_json_m ?>)" class="btn-icon bg-cream-100 text-navy-800 border-gold-200" title="Detail"><i class="fa-regular fa-eye text-[11px]"></i></button>
@@ -287,6 +295,14 @@ $lokOpsis = [
                                 <i class="fa-solid fa-circle-dot text-primary-500 text-[8px] mt-1.5 flex-shrink-0"></i>
                                 <span><?= e(mb_strimwidth($b['alamat_jemput'],0,60,'...')) ?></span>
                             </div>
+                            <?php if (!empty($b['maps_link'])): ?>
+                                <div class="mb-1.5 pl-3">
+                                    <a href="<?= e($b['maps_link']) ?>" target="_blank" rel="noopener"
+                                       class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-800 underline">
+                                        <i class="fa-solid fa-map-location-dot text-[10px]"></i> Buka di Maps
+                                    </a>
+                                </div>
+                            <?php endif; ?>
                             <div class="flex gap-1.5 items-start">
                                 <i class="fa-solid fa-location-dot text-red-500 text-[10px] mt-1 flex-shrink-0"></i>
                                 <span><?= e(mb_strimwidth($b['alamat_tujuan'],0,60,'...')) ?></span>
@@ -347,6 +363,19 @@ $lokOpsis = [
                         <div class="md:col-span-2">
                             <label class="form-label">Alamat Penjemputan *</label>
                             <textarea name="alamat_jemput" required rows="2" class="input-field resize-none" x-model="form.alamat_jemput"></textarea>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="form-label">
+                                Pin Maps
+                                <span class="text-slate-400 font-normal text-xs ml-1">(opsional)</span>
+                            </label>
+                            <input name="maps_link" type="url" class="input-field" x-model="form.maps_link"
+                                   placeholder="https://www.google.com/maps?q=... atau link share Maps">
+                            <div x-show="form.maps_link" class="mt-1.5">
+                                <a :href="form.maps_link" target="_blank" rel="noopener" class="text-xs font-bold text-emerald-700 underline">
+                                    <i class="fa-solid fa-external-link mr-1"></i>Buka di Maps
+                                </a>
+                            </div>
                         </div>
                         <div class="md:col-span-2">
                             <label class="form-label">Alamat Tujuan *</label>
@@ -429,7 +458,7 @@ $lokOpsis = [
                                     <option value="Jam 20.00 — Kota-kota Penjemputan area Blora">20.00 · Kota-kota Penjemputan</option>
                                 </optgroup>
                                 <optgroup x-show="(form.lokasi_jemput === 'Surabaya' || form.lokasi_jemput === 'Sidoarjo')" label="Surabaya / Sidoarjo (Start Keberangkatan)">
-                                    <option value="Jam 11.00 — Start dari Bandara Juanda (Surabaya)">11.00 · Start dari Bandara Juanda</option>
+                                    <option value="Jam 10.00 — Start dari Bandara Juanda (Surabaya)">10.00 · Start dari Bandara Juanda</option>
                                     <option value="Jam 15.00 — Start dari Bandara Juanda (Surabaya)">15.00 · Start dari Bandara Juanda</option>
                                     <option value="Jam 20.00 — (KHUSUS!) Start dari Sidoarjo · Door to Door SEMUA KECAMATAN Sidoarjo + Surabaya/Gresik">20.00 · Door to Door KHUSUS Sidoarjo/SBY/Gresik</option>
                                 </optgroup>
@@ -519,6 +548,19 @@ $lokOpsis = [
                             <textarea name="alamat_jemput" required rows="2" class="input-field resize-none" x-model="form.alamat_jemput"></textarea>
                         </div>
                         <div class="md:col-span-2">
+                            <label class="form-label">
+                                Pin Maps
+                                <span class="text-slate-400 font-normal text-xs ml-1">(opsional)</span>
+                            </label>
+                            <input name="maps_link" type="url" class="input-field" x-model="form.maps_link"
+                                   placeholder="https://www.google.com/maps?q=... atau link share Maps">
+                            <div x-show="form.maps_link" class="mt-1.5">
+                                <a :href="form.maps_link" target="_blank" rel="noopener" class="text-xs font-bold text-emerald-700 underline">
+                                    <i class="fa-solid fa-external-link mr-1"></i>Buka di Maps
+                                </a>
+                            </div>
+                        </div>
+                        <div class="md:col-span-2">
                             <label class="form-label">Alamat Tujuan *</label>
                             <textarea name="alamat_tujuan" required rows="2" class="input-field resize-none" x-model="form.alamat_tujuan"></textarea>
                         </div>
@@ -606,7 +648,7 @@ $lokOpsis = [
                                     <option value="Jam 20.00 — Kota-kota Penjemputan area Blora">🕗 20.00 · Kota-kota Penjemputan</option>
                                 </optgroup>
                                 <optgroup x-show="(form.lokasi_jemput === 'Surabaya' || form.lokasi_jemput === 'Sidoarjo')" label="✈️ Surabaya / Sidoarjo (Start)">
-                                    <option value="Jam 11.00 — Start dari Bandara Juanda (Surabaya)">🕚 11.00 · Start dari Bandara Juanda</option>
+                                    <option value="Jam 10.00 — Start dari Bandara Juanda (Surabaya)">🕙 10.00 · Start dari Bandara Juanda</option>
                                     <option value="Jam 15.00 — Start dari Bandara Juanda (Surabaya)">🕞 15.00 · Start dari Bandara Juanda</option>
                                     <option value="Jam 20.00 — (KHUSUS!) Start dari Sidoarjo · Door to Door SEMUA KECAMATAN Sidoarjo + Surabaya/Gresik">🕗 20.00 · Door to Door KHUSUS Sidoarjo/SBY/Gresik</option>
                                 </optgroup>
@@ -684,6 +726,12 @@ $lokOpsis = [
                     <div class="flex justify-between gap-3"><span class="text-slate-500">Rute</span><span class="font-semibold text-right" x-text="b.rute || 'Custom'"></span></div>
                     <div class="flex justify-between gap-3"><span class="text-slate-500">Berangkat</span><span class="font-semibold text-right" x-text="(b.tanggal_berangkat || '') + ' · ' + (b.jam_jemput || '')"></span></div>
                     <div class="flex justify-between gap-3"><span class="text-slate-500">Lokasi</span><span class="font-semibold text-right" x-text="b.lokasi_jemput || 'Blora'"></span></div>
+                    <div x-show="b.maps_link" class="flex justify-between gap-3 items-start">
+                        <span class="text-slate-500 shrink-0">Pin Maps</span>
+                        <a :href="b.maps_link" target="_blank" rel="noopener" class="font-bold text-emerald-700 underline text-right text-xs break-all">
+                            <i class="fa-solid fa-map-location-dot mr-1"></i>Buka di Maps
+                        </a>
+                    </div>
                     <div class="flex justify-between gap-3"><span class="text-slate-500">Kursi</span><span class="font-semibold" x-text="b.jumlah_kursi"></span></div>
                     <div class="flex justify-between gap-3"><span class="text-slate-500">Total</span><span class="font-extrabold text-navy-900" x-text="'Rp ' + Number(b.total_harga||0).toLocaleString('id-ID')"></span></div>
                     <div class="flex justify-between gap-3"><span class="text-slate-500">Status</span><span class="font-bold capitalize" x-text="b.status"></span></div>
@@ -768,7 +816,7 @@ function modalTambahData(){
             jumlah_kursi:1, tanggal_berangkat: '<?= date('Y-m-d') ?>',
             jam_jemput:'06:00', status:'confirmed', barang_bawaan:'',
             total_harga: <?= (int)$defaultHarga ?>, catatan_admin:'',
-            lokasi_jemput:'Blora', jadwal_jemput:''
+            lokasi_jemput:'Blora', jadwal_jemput:'', maps_link:''
         },
         open(){
             this.form = {
@@ -777,7 +825,7 @@ function modalTambahData(){
                 jumlah_kursi:1, tanggal_berangkat: '<?= date('Y-m-d') ?>',
                 jam_jemput:'06:00', status:'confirmed', barang_bawaan:'',
                 total_harga: this.defaultHarga, catatan_admin:'',
-                lokasi_jemput:'Blora', jadwal_jemput:''
+                lokasi_jemput:'Blora', jadwal_jemput:'', maps_link:''
             };
             this.show = true;
         },
@@ -818,12 +866,13 @@ function modalEditData(){
             'harga_rute_saat_booking' => 0,
             'lokasi_jemput' => 'Blora',
             'jadwal_jemput' => '',
-        ], $editBooking)) : '{id:0,nama:"",no_hp:"",alamat_jemput:"",alamat_tujuan:"",id_rute:0,jumlah_kursi:1,tanggal_berangkat:"'.date('Y-m-d').'",jam_jemput:"06:00",status:"pending",barang_bawaan:"",total_harga:'.$defaultHarga.',catatan_admin:"",source:"manual",created_at:"",rute:"",harga_rute_saat_booking:0,lokasi_jemput:"Blora",jadwal_jemput:""}' ?>,
+            'maps_link' => '',
+        ], $editBooking)) : '{id:0,nama:"",no_hp:"",alamat_jemput:"",alamat_tujuan:"",id_rute:0,jumlah_kursi:1,tanggal_berangkat:"'.date('Y-m-d').'",jam_jemput:"06:00",status:"pending",barang_bawaan:"",total_harga:'.$defaultHarga.',catatan_admin:"",source:"manual",created_at:"",rute:"",harga_rute_saat_booking:0,lokasi_jemput:"Blora",jadwal_jemput:"",maps_link:""}' ?>,
         open(b){
             this.form = Object.assign({
                 catatan_admin:'', barang_bawaan:'', jam_jemput:'06:00',
                 id_rute: 0, rute:'', harga_rute_saat_booking: 0,
-                lokasi_jemput:'Blora', jadwal_jemput:'',
+                lokasi_jemput:'Blora', jadwal_jemput:'', maps_link:'',
             }, b || {});
             if (typeof this.form.jam_jemput === 'string' && this.form.jam_jemput.length === 8) {
                 this.form.jam_jemput = this.form.jam_jemput.substring(0,5);
@@ -833,6 +882,7 @@ function modalEditData(){
             // Pastikan lokasi_jemput fallback ke Blora kalo kosong
             if (!this.form.lokasi_jemput || this.form.lokasi_jemput === '') this.form.lokasi_jemput = 'Blora';
             if (!this.form.jadwal_jemput) this.form.jadwal_jemput = '';
+            if (!this.form.maps_link) this.form.maps_link = '';
             this.show = true;
         },
         close(){ this.show = false; window.history.replaceState(null,'','<?= BASE_URL ?>/admin/bookings.php'); },

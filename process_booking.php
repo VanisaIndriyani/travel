@@ -29,9 +29,16 @@ $jam_jemput       = '00:00:00';
 $barang_bawaan    = trim($_POST['barang_bawaan']    ?? '');
 $id_rute_post     = (int)($_POST['id_rute']         ?? 0);
 
-$lokasi_jemput_post = trim($_POST['lokasi_jemput'] ?? 'Blora');
-$lokasi_jemput    = in_array($lokasi_jemput_post, ['Blora', 'Surabaya']) ? $lokasi_jemput_post : 'Blora';
+$lokasi_jemput_post = trim($_POST['lokasi_jemput'] ?? '');
 $jadwal_jemput    = trim($_POST['jadwal_jemput']   ?? '');
+// Area diambil dari jadwal jika form tidak kirim lokasi (tombol Blora/SBY diganti Maps)
+if (!in_array($lokasi_jemput_post, ['Blora', 'Surabaya'], true)) {
+    $lokasi_jemput = infer_lokasi_from_jadwal($jadwal_jemput);
+} else {
+    $lokasi_jemput = $lokasi_jemput_post;
+}
+$maps_link = sanitize_maps_link($_POST['maps_link'] ?? '');
+ensure_bookings_maps_link_column();
 
 // === 3. Validasi ===
 $errors = [];
@@ -82,22 +89,41 @@ if (empty($nama_rute_final)) $nama_rute_final = 'Rute Custom';
 $total_harga = $jumlah_kursi * $harga_rute_final;
 if ($total_harga <= 0) $total_harga = $jumlah_kursi * HARGA_TIKET_DEFAULT;
 
-// === 5. Insert ke Database (tambah kolom rute + lokasi & jadwal jemput!) ===
+// === 5. Insert ke Database (lokasi, jadwal, maps_link opsional) ===
 try {
-    $sql = "INSERT INTO bookings
-            (nama, no_hp, alamat_jemput, alamat_tujuan, jumlah_kursi, tanggal_berangkat,
-             jam_jemput, barang_bawaan, lokasi_jemput, jadwal_jemput, total_harga, status, source,
-             id_rute, rute, harga_rute_saat_booking)
-            VALUES
-            (?,?,?,?,?,?,?,?,?,?,?,?, 'online',
-             ?, ?, ?)";
-    $stmt = $pdo->prepare($sql);
-    $ok = $stmt->execute([
-        $nama, $no_hp, $alamat_jemput, $alamat_tujuan, $jumlah_kursi,
-        $tanggal_berangkat, $jam_jemput, $barang_bawaan, $lokasi_jemput, $jadwal_jemput,
-        $total_harga, 'pending',
-        $id_rute_final, $nama_rute_final, $harga_rute_final
-    ]);
+    $hasMapsCol = ensure_bookings_maps_link_column();
+    if ($hasMapsCol) {
+        $sql = "INSERT INTO bookings
+                (nama, no_hp, alamat_jemput, maps_link, alamat_tujuan, jumlah_kursi, tanggal_berangkat,
+                 jam_jemput, barang_bawaan, lokasi_jemput, jadwal_jemput, total_harga, status, source,
+                 id_rute, rute, harga_rute_saat_booking)
+                VALUES
+                (?,?,?,?,?,?,?,?,?,?,?,?,?, 'online',
+                 ?, ?, ?)";
+        $stmt = $pdo->prepare($sql);
+        $ok = $stmt->execute([
+            $nama, $no_hp, $alamat_jemput, ($maps_link !== '' ? $maps_link : null), $alamat_tujuan, $jumlah_kursi,
+            $tanggal_berangkat, $jam_jemput, $barang_bawaan, $lokasi_jemput, $jadwal_jemput,
+            $total_harga, 'pending',
+            $id_rute_final, $nama_rute_final, $harga_rute_final
+        ]);
+    } else {
+        // Fallback tanpa kolom maps_link (jalankan sql/add_maps_link.sql)
+        $sql = "INSERT INTO bookings
+                (nama, no_hp, alamat_jemput, alamat_tujuan, jumlah_kursi, tanggal_berangkat,
+                 jam_jemput, barang_bawaan, lokasi_jemput, jadwal_jemput, total_harga, status, source,
+                 id_rute, rute, harga_rute_saat_booking)
+                VALUES
+                (?,?,?,?,?,?,?,?,?,?,?, 'online',
+                 ?, ?, ?)";
+        $stmt = $pdo->prepare($sql);
+        $ok = $stmt->execute([
+            $nama, $no_hp, $alamat_jemput, $alamat_tujuan, $jumlah_kursi,
+            $tanggal_berangkat, $jam_jemput, $barang_bawaan, $lokasi_jemput, $jadwal_jemput,
+            $total_harga, 'pending',
+            $id_rute_final, $nama_rute_final, $harga_rute_final
+        ]);
+    }
     $booking_id = $pdo->lastInsertId();
 } catch (PDOException $e) {
     set_flash('error', 'Database error: ' . $e->getMessage());
@@ -112,6 +138,7 @@ if (!$ok || empty($booking_id)) {
 // === 6. Berhasil! ===
 clear_old();
 $wa_nomor = preg_replace('/[^0-9]/', '', WA_ADMIN);
+$wa_maps_line = $maps_link !== '' ? ("*Pin Maps:* {$maps_link}\n") : '';
 $wa_pesan = rawurlencode(
     "Halo Admin Mustika Travel,\n\n".
     "Saya baru saja melakukan booking online dengan data berikut:\n".
@@ -123,6 +150,7 @@ $wa_pesan = rawurlencode(
     "*Lokasi Jemput:* {$lokasi_jemput}\n".
     "*Jadwal Penjemputan:* {$jadwal_jemput}\n".
     "*Alamat Jemput:* {$alamat_jemput}\n".
+    $wa_maps_line.
     "*Alamat Tujuan:* {$alamat_tujuan}\n".
     "*Jumlah Kursi:* {$jumlah_kursi} orang\n".
     "*Tanggal:* ".tgl_id($tanggal_berangkat)."\n".
@@ -130,6 +158,11 @@ $wa_pesan = rawurlencode(
     "--------------------------------\n".
     "Mohon dikonfirmasi ya, terima kasih 🙏"
 );
+
+$maps_flash = '';
+if ($maps_link !== '') {
+    $maps_flash = '<div class="flex justify-between gap-3 items-start"><span class="text-slate-500 shrink-0">🗺️ Pin Maps:</span><a href="'. e($maps_link) .'" target="_blank" rel="noopener" class="font-bold text-emerald-700 underline text-right break-all text-xs">Buka di Maps</a></div>';
+}
 
 $pesan = '
 <div class="space-y-3">
@@ -139,6 +172,7 @@ $pesan = '
         <div class="flex justify-between gap-3"><span class="text-slate-500">Rute:</span><span class="font-black text-primary-800">'. e($nama_rute_final) .'</span></div>
         <div class="flex justify-between gap-3"><span class="text-slate-500">📌 Lokasi:</span><span class="font-bold text-slate-800">'. e($lokasi_jemput) .'</span></div>
         <div class="flex flex-col gap-0.5"><span class="text-slate-500">⏰ Jadwal Jemput:</span><span class="font-bold text-[12px] text-amber-700 leading-tight">'. e($jadwal_jemput) .'</span></div>
+        '. $maps_flash .'
         <div class="border-t border-amber-200/60 my-1"></div>
         <div class="flex justify-between gap-3"><span class="text-slate-500">Harga:</span><span class="font-bold text-slate-800">'. rupiah($harga_rute_final) .' / orang</span></div>
         <div class="flex justify-between gap-3"><span class="text-slate-500">Total Bayar:</span><span class="font-black text-xl text-amber-700">'. rupiah($total_harga) .'</span></div>

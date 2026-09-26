@@ -98,6 +98,29 @@ $listRuteAktif = get_rutes(true);
         }
     }
 
+    /* Jadwal: 2 kolom side-by-side sejak HP */
+    #jadwal .jadwal-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.625rem;
+    }
+    @media (min-width: 640px) {
+        #jadwal .jadwal-grid { gap: 1.25rem; }
+    }
+    @media (min-width: 768px) {
+        #jadwal .jadwal-grid { gap: 1.75rem; }
+    }
+    @media (max-width: 639px) {
+        #jadwal .jadwal-card { border-radius: 1rem; padding: 0.75rem; }
+        #jadwal .jadwal-chip {
+            padding: 0.45rem 0.55rem;
+            gap: 0.45rem;
+            border-radius: 0.65rem;
+        }
+        #jadwal .jadwal-chip .w-8 { width: 1.6rem; height: 1.6rem; border-radius: 0.45rem; }
+        #jadwal .jadwal-chip .font-serif { font-size: 0.95rem; }
+    }
+
     /* Armada: 2 kolom kompak di HP, 2 kolom tablet, 3 kolom desktop */
     #armada .armada-grid {
         display: grid;
@@ -477,6 +500,91 @@ $listRuteAktif = get_rutes(true);
                     </div>
                 </blockquote>
             </div>
+        </div>
+    </div>
+</section>
+
+<div class="h-px gold-divider w-10/12 max-w-3xl mx-auto"></div>
+
+<!-- ============ SECTION JADWAL KEBERANGKATAN ============ -->
+<section id="jadwal" class="py-16 md:py-24 relative overflow-hidden bg-white">
+    <div class="absolute top-0 inset-x-0 h-px gold-divider opacity-70"></div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div class="text-center max-w-3xl mx-auto mb-10 md:mb-14">
+            <p class="lux-eyebrow text-gold-600 mb-3">Keberangkatan harian</p>
+            <h2 class="font-serif text-3xl md:text-4xl lg:text-[2.7rem] text-navy-900 font-semibold mb-4 leading-tight">
+                Jadwal penjemputan
+            </h2>
+            <p class="text-slate-600 md:text-base leading-relaxed max-w-2xl mx-auto">
+                Start setiap hari dari <strong class="text-navy-900">Blora</strong> dan <strong class="text-navy-900">Surabaya</strong>.
+                Pilih jam yang paling nyaman, lalu booking online — admin konfirmasi via WhatsApp.
+            </p>
+        </div>
+
+        <div class="jadwal-grid max-w-4xl mx-auto">
+            <!-- Blora -->
+            <article class="jadwal-card group relative overflow-hidden rounded-2xl md:rounded-3xl border border-cream-200 bg-cream-50 p-4 sm:p-6 md:p-8 hover:border-gold-400/50 hover:shadow-lux transition duration-500">
+                <div class="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-gold-400/70 to-transparent opacity-0 group-hover:opacity-100 transition"></div>
+                <div class="flex items-start gap-3 mb-4 md:mb-5">
+                    <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-navy-900 text-gold-300 flex items-center justify-center shrink-0 border border-gold-400/30">
+                        <i class="fa-solid fa-city text-sm md:text-base"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-[10px] md:text-[11px] uppercase tracking-[0.14em] text-gold-600 font-semibold mb-0.5">Start dari</p>
+                        <h3 class="font-serif text-xl sm:text-2xl md:text-[1.75rem] text-navy-900 leading-tight">Blora</h3>
+                    </div>
+                </div>
+                <p class="text-[11px] sm:text-xs text-slate-500 mb-3 md:mb-4 leading-relaxed">Kota-kota &amp; door-to-door area Blora</p>
+                <div class="flex flex-col gap-2">
+                    <?php foreach (['08.00', '11.00', '20.00'] as $jam): ?>
+                        <div class="jadwal-chip flex items-center gap-2.5 px-3 py-2.5 md:px-4 md:py-3 rounded-xl bg-white border border-cream-200 group-hover:border-gold-200/80 transition">
+                            <span class="w-8 h-8 rounded-lg bg-navy-900 text-gold-300 flex items-center justify-center shrink-0">
+                                <i class="fa-regular fa-clock text-xs"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <div class="font-serif text-lg md:text-xl text-navy-900 leading-none">Jam <?= $jam ?></div>
+                                <div class="text-[10px] text-slate-500 mt-0.5">WIB · setiap hari</div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </article>
+
+            <!-- Surabaya -->
+            <article class="jadwal-card group relative overflow-hidden rounded-2xl md:rounded-3xl border border-cream-200 bg-cream-50 p-4 sm:p-6 md:p-8 hover:border-gold-400/50 hover:shadow-lux transition duration-500">
+                <div class="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-gold-400/70 to-transparent opacity-0 group-hover:opacity-100 transition"></div>
+                <div class="flex items-start gap-3 mb-4 md:mb-5">
+                    <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-navy-900 text-gold-300 flex items-center justify-center shrink-0 border border-gold-400/30">
+                        <i class="fa-solid fa-plane-departure text-sm md:text-base"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-[10px] md:text-[11px] uppercase tracking-[0.14em] text-gold-600 font-semibold mb-0.5">Start dari</p>
+                        <h3 class="font-serif text-xl sm:text-2xl md:text-[1.75rem] text-navy-900 leading-tight">Surabaya</h3>
+                    </div>
+                </div>
+                <p class="text-[11px] sm:text-xs text-slate-500 mb-3 md:mb-4 leading-relaxed">Juanda · Sidoarjo · Surabaya / Gresik</p>
+                <div class="flex flex-col gap-2">
+                    <?php foreach (['10.00', '15.00', '20.00'] as $jam): ?>
+                        <div class="jadwal-chip flex items-center gap-2.5 px-3 py-2.5 md:px-4 md:py-3 rounded-xl bg-white border border-cream-200 group-hover:border-gold-200/80 transition">
+                            <span class="w-8 h-8 rounded-lg bg-navy-900 text-gold-300 flex items-center justify-center shrink-0">
+                                <i class="fa-regular fa-clock text-xs"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <div class="font-serif text-lg md:text-xl text-navy-900 leading-none">Jam <?= $jam ?></div>
+                                <div class="text-[10px] text-slate-500 mt-0.5">WIB · setiap hari</div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </article>
+        </div>
+
+        <div class="text-center mt-8 md:mt-10">
+            <a href="<?= BASE_URL ?>/booking.php" class="shine-btn inline-flex items-center gap-2.5 px-7 py-3.5 rounded-xl bg-navy-900 text-cream-50 hover:bg-navy-800 font-semibold transition shadow-lux">
+                <i class="fa-solid fa-ticket text-gold-400"></i> Booking sesuai jadwal
+                <i class="fa-solid fa-arrow-right text-xs text-gold-400"></i>
+            </a>
+            <p class="text-[11px] text-slate-500 mt-3">Jadwal bisa menyesuaikan unit &amp; permintaan — admin akan konfirmasi.</p>
         </div>
     </div>
 </section>

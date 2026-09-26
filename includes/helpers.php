@@ -610,3 +610,58 @@ function get_carter_by_id(int $id): ?array
         return null;
     }
 }
+
+/**
+ * Pastikan kolom maps_link ada di tabel bookings (upgrade DB tanpa re-install).
+ * Aman dipanggil berulang; gagal → false (bisa jalankan sql/add_maps_link.sql manual).
+ */
+function ensure_bookings_maps_link_column(): bool
+{
+    global $pdo;
+    if (empty($pdo)) return false;
+    static $cached = null;
+    if ($cached === true) return true;
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM `bookings` LIKE 'maps_link'")->fetch(PDO::FETCH_ASSOC);
+        if (!empty($cols)) {
+            $cached = true;
+            return true;
+        }
+        $pdo->exec("ALTER TABLE `bookings` ADD COLUMN `maps_link` VARCHAR(500) NULL DEFAULT NULL COMMENT 'Link Google Maps pin lokasi jemput (opsional)' AFTER `alamat_jemput`");
+        $cached = true;
+        return true;
+    } catch (Throwable $e) {
+        $cached = false;
+        return false;
+    }
+}
+
+/**
+ * Validasi & bersihkan URL Google Maps dari input penumpang/admin.
+ * Kosong = OK (opsional). URL non-Maps ditolak → string kosong.
+ */
+function sanitize_maps_link(?string $url): string
+{
+    $url = trim((string)$url);
+    if ($url === '') return '';
+    if (strlen($url) > 500) $url = substr($url, 0, 500);
+    if (!preg_match('#^https?://#i', $url)) return '';
+    $ok = preg_match(
+        '#^https?://(www\.)?(google\.[a-z.]+/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl/maps)#i',
+        $url
+    );
+    return $ok ? $url : '';
+}
+
+/**
+ * Infer area penjemputan dari teks jadwal (Blora / Surabaya) untuk kompatibilitas admin.
+ */
+function infer_lokasi_from_jadwal(string $jadwal): string
+{
+    $j = strtolower($jadwal);
+    if (strpos($j, 'surabaya') !== false || strpos($j, 'sidoarjo') !== false
+        || strpos($j, 'juanda') !== false || strpos($j, 'gresik') !== false) {
+        return 'Surabaya';
+    }
+    return 'Blora';
+}
