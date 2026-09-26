@@ -28,6 +28,19 @@ function redirect($url)
 }
 
 /**
+ * URL aset lokal dengan cache-busting (?v=filemtime) agar browser fetch ulang setelah deploy.
+ * @param string $relativePath Path relatif dari root project, mis. 'admin/assets/admin.css'
+ * @return string
+ */
+function asset_url(string $relativePath): string
+{
+    $relativePath = ltrim(str_replace('\\', '/', $relativePath), '/');
+    $abs = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    $ver = is_file($abs) ? (string) filemtime($abs) : (string) time();
+    return rtrim(BASE_URL, '/') . '/' . $relativePath . '?v=' . $ver;
+}
+
+/**
  * Buat CSRF Token untuk keamanan form
  * @return string
  */

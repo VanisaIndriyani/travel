@@ -30,7 +30,7 @@ if (!empty($_SESSION['admin_id'])) {
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= BASE_URL ?>/admin/assets/admin.css">
+    <link rel="stylesheet" href="<?= asset_url('admin/assets/admin.css') ?>">
 </head>
 <body class="admin-body">
 
