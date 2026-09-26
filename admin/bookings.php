@@ -347,7 +347,9 @@ $lokOpsis = [
                         <div class="admin-modal-ico"><i class="fa-brands fa-whatsapp"></i></div>
                         <div class="min-w-0">
                             <h3>Impor dari WhatsApp</h3>
-                            <p x-text="step === 1 ? 'Tempel chat atau upload screenshot' : 'Periksa data, lalu simpan ke pemesanan'"></p>
+                            <p x-text="step === 1
+                                ? (aiAvailable ? 'Tempel chat atau upload screenshot' : 'Tempel chat WhatsApp')
+                                : 'Periksa data, lalu simpan ke pemesanan'"></p>
                         </div>
                     </div>
                     <button type="button" @click="close()" class="admin-modal-close" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
@@ -359,15 +361,17 @@ $lokOpsis = [
                     <textarea class="input-field wa-import-ta" rows="8" x-model="chatText"
                               placeholder="Contoh:&#10;Nama: Budi Santoso&#10;HP: 081234567890&#10;Jemput: Jl. Pemuda No.12, Blora&#10;Tujuan: Jl. Ahmad Yani, Surabaya&#10;Rute: Blora - Surabaya&#10;Tanggal: 28/09/2026&#10;Kursi: 2&#10;Jam: 08.00&#10;Barang: 1 koper"></textarea>
 
-                    <div class="mt-4" x-show="aiAvailable">
-                        <label class="form-label">Screenshot chat <span class="text-slate-400 font-normal text-xs">(opsional, butuh Vision API)</span></label>
+                    <?php if ($waAiAvailable): ?>
+                    <div class="mt-4">
+                        <label class="form-label">Upload screenshot</label>
                         <label class="wa-import-file">
                             <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="sr-only" @change="onFile($event)">
                             <i class="fa-solid fa-image"></i>
-                            <span x-text="fileName || 'Pilih gambar JPG / PNG'"></span>
+                            <span x-text="fileName || 'Pilih gambar JPG / PNG / WEBP'"></span>
                         </label>
                         <button type="button" class="text-[11px] font-bold text-red-600 mt-1.5 underline" x-show="fileName" @click="clearFile()">Hapus gambar</button>
                     </div>
+                    <?php endif; ?>
 
                     <div class="wa-import-err" x-show="error" x-text="error"></div>
                 </div>
@@ -1059,7 +1063,7 @@ function modalWaImportData(){
                 return;
             }
             if (!text && this.file && !this.aiAvailable) {
-                this.error = 'Screenshot butuh API key. Tempel teks chat saja.';
+                this.error = 'Upload screenshot tidak tersedia. Tempel teks chat saja.';
                 return;
             }
             this.loading = true;

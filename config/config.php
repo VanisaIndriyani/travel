@@ -120,6 +120,11 @@ date_default_timezone_set('Asia/Jakarta');
 //   AI_MODEL=gpt-4o-mini                    (opsional)
 // =============================================
 if (!function_exists('mustika_load_dotenv')) {
+    /**
+     * Load .env dari path absolut (tidak bergantung cwd).
+     * File .env mengisi variabel yang belum ada ATAU kosong di environment —
+     * penting di hosting: kadang OPENAI_API_KEY sudah "ada" tapi string kosong.
+     */
     function mustika_load_dotenv(string $path): void
     {
         if (!is_file($path) || !is_readable($path)) return;
@@ -139,24 +144,49 @@ if (!function_exists('mustika_load_dotenv')) {
             ) {
                 $value = substr($value, 1, -1);
             }
-            if (getenv($name) === false) {
+            $existing = getenv($name);
+            if ($existing === false) {
+                $existing = $_ENV[$name] ?? $_SERVER[$name] ?? false;
+            }
+            // Isi jika belum ada, atau ada tapi kosong (sering di shared hosting)
+            if ($existing === false || $existing === '') {
                 putenv("{$name}={$value}");
                 $_ENV[$name] = $value;
+                $_SERVER[$name] = $value;
             }
         }
     }
 }
-mustika_load_dotenv(dirname(__DIR__) . '/.env');
+
+// Path absolut ke root project — aman dari admin/ maupun CLI (cwd beda)
+$mustikaEnvCandidates = [
+    dirname(__DIR__) . DIRECTORY_SEPARATOR . '.env',
+    (realpath(dirname(__DIR__)) ?: dirname(__DIR__)) . DIRECTORY_SEPARATOR . '.env',
+];
+foreach (array_unique($mustikaEnvCandidates) as $mustikaEnvPath) {
+    mustika_load_dotenv($mustikaEnvPath);
+}
+
+if (!function_exists('mustika_env')) {
+    function mustika_env(string $name, string $default = ''): string
+    {
+        $v = getenv($name);
+        if ($v === false || $v === '') {
+            $v = $_ENV[$name] ?? $_SERVER[$name] ?? $default;
+        }
+        return is_string($v) ? $v : $default;
+    }
+}
 
 if (!defined('OPENAI_API_KEY')) {
-    $aiKey = (string)(getenv('OPENAI_API_KEY') ?: getenv('AI_API_KEY') ?: '');
-    define('OPENAI_API_KEY', $aiKey);
+    $aiKey = mustika_env('OPENAI_API_KEY', mustika_env('AI_API_KEY', ''));
+    define('OPENAI_API_KEY', trim($aiKey));
 }
 if (!defined('AI_BASE_URL')) {
-    $aiBase = (string)(getenv('AI_BASE_URL') ?: 'https://api.openai.com/v1');
-    define('AI_BASE_URL', rtrim($aiBase, '/'));
+    $aiBase = mustika_env('AI_BASE_URL', 'https://api.openai.com/v1');
+    define('AI_BASE_URL', rtrim($aiBase !== '' ? $aiBase : 'https://api.openai.com/v1', '/'));
 }
 if (!defined('AI_MODEL')) {
-    $aiModel = (string)(getenv('AI_MODEL') ?: 'gpt-4o-mini');
+    $aiModel = mustika_env('AI_MODEL', 'gpt-4o-mini');
     define('AI_MODEL', $aiModel !== '' ? $aiModel : 'gpt-4o-mini');
 }

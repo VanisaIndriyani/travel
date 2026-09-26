@@ -3,6 +3,7 @@
 !.env.example
 credentials.json
 *.pem
+!config/cacert.pem
 *.key
 /vendor/
 /node_modules/

@@ -51,7 +51,9 @@ function wa_booking_parse(string $text, ?array $image = null): array
             'ok' => false,
             'method' => 'none',
             'fields' => wa_booking_empty_fields(),
-            'message' => 'Tempel teks chat WA, atau upload screenshot (butuh API key).',
+            'message' => $aiAvailable
+                ? 'Tempel teks chat WA, atau upload screenshot.'
+                : 'Tempel teks chat WhatsApp.',
             'ai_available' => $aiAvailable,
             'vision_available' => $visionOk,
         ];
@@ -62,7 +64,7 @@ function wa_booking_parse(string $text, ?array $image = null): array
             'ok' => false,
             'method' => 'none',
             'fields' => wa_booking_empty_fields(),
-            'message' => 'Screenshot butuh OPENAI_API_KEY di .env. Untuk tanpa AI, tempel teks chat saja.',
+            'message' => 'Upload screenshot tidak tersedia. Tempel teks chat saja.',
             'ai_available' => false,
             'vision_available' => false,
         ];
@@ -73,16 +75,23 @@ function wa_booking_parse(string $text, ?array $image = null): array
     $merged = $rules;
 
     if ($aiAvailable && ($text !== '' || $hasImage)) {
+        wa_booking_ai_last_error('');
         $ai = wa_booking_parse_ai($text, $hasImage ? $image : null);
         if (is_array($ai)) {
             $merged = wa_booking_merge_fields($ai, $rules);
             $method = ($text !== '' && wa_booking_fields_have_data($rules)) ? 'ai+rules' : 'ai';
         } elseif ($text === '' && $hasImage) {
+            $detail = wa_booking_ai_last_error();
+            $msg = 'Gagal membaca screenshot via AI. Tempel teks chat sebagai alternatif.';
+            if ($detail !== '') {
+                $msg .= ' Detail: ' . $detail;
+            }
             return [
                 'ok' => false,
                 'method' => 'none',
                 'fields' => wa_booking_empty_fields(),
-                'message' => 'Gagal membaca screenshot via AI. Tempel teks chat sebagai alternatif.',
+                'message' => $msg,
+                'ai_error' => $detail,
                 'ai_available' => true,
                 'vision_available' => true,
             ];
@@ -514,13 +523,276 @@ function wa_booking_match_jadwal(string $existing, string $jam, string $lokasi):
 }
 
 /**
+ * Simpan / ambil error AI terakhir (aman untuk UI — tanpa API key).
+ */
+function wa_booking_ai_last_error(?string $set = null): string
+{
+    static $err = '';
+    if ($set !== null) {
+        $err = wa_booking_sanitize_ai_error($set);
+    }
+    return $err;
+}
+
+/**
+ * Redact kemungkinan API key / token dari pesan error.
+ */
+function wa_booking_sanitize_ai_error(string $msg): string
+{
+    $msg = preg_replace('/sk-[a-zA-Z0-9_\-]{10,}/', '[REDACTED]', $msg) ?? $msg;
+    $msg = preg_replace('/Bearer\s+\S+/i', 'Bearer [REDACTED]', $msg) ?? $msg;
+    $msg = preg_replace('/\bkey[=:]\s*\S+/i', 'key=[REDACTED]', $msg) ?? $msg;
+    $msg = trim(preg_replace('/\s+/', ' ', $msg) ?? $msg);
+    if (mb_strlen($msg) > 280) {
+        $msg = mb_substr($msg, 0, 280) . '…';
+    }
+    return $msg;
+}
+
+/**
+ * Path CA bundle yang valid untuk cURL (hindari curl.cainfo Laragon rusak).
+ * Prioritas: config/cacert.pem project → lokasi Laragon umum → php.ini jika file ada.
+ */
+function wa_booking_curl_cainfo(): ?string
+{
+    static $resolved = false;
+    static $path = null;
+    if ($resolved) {
+        return $path;
+    }
+    $resolved = true;
+
+    $candidates = [];
+    $project = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'cacert.pem';
+    $candidates[] = $project;
+
+    $laragonRoot = getenv('LARAGON_ROOT');
+    if (is_string($laragonRoot) && $laragonRoot !== '') {
+        $candidates[] = rtrim($laragonRoot, "\\/") . DIRECTORY_SEPARATOR . 'etc' . DIRECTORY_SEPARATOR . 'ssl' . DIRECTORY_SEPARATOR . 'cacert.pem';
+    }
+    $candidates[] = 'C:\\laragon\\etc\\ssl\\cacert.pem';
+    $candidates[] = 'D:\\laragon\\etc\\ssl\\cacert.pem';
+    $candidates[] = 'C:\\APLIKASI\\laragon\\etc\\ssl\\cacert.pem';
+    $candidates[] = 'D:\\APLIKASI\\laragon\\etc\\ssl\\cacert.pem';
+
+    foreach (['curl.cainfo', 'openssl.cafile'] as $iniKey) {
+        $iniVal = ini_get($iniKey);
+        if (is_string($iniVal) && $iniVal !== '') {
+            $candidates[] = $iniVal;
+        }
+    }
+
+    foreach ($candidates as $cand) {
+        if (!is_string($cand) || $cand === '') {
+            continue;
+        }
+        $real = @realpath($cand);
+        if ($real !== false && is_file($real) && is_readable($real)) {
+            $path = $real;
+            return $path;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Opsi SSL cURL: verifikasi peer + CAINFO project (override php.ini yang path-nya hilang).
+ *
+ * @return array<int, mixed>
+ */
+function wa_booking_curl_ssl_opts(): array
+{
+    $opts = [
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+    ];
+    $ca = wa_booking_curl_cainfo();
+    if ($ca !== null) {
+        $opts[CURLOPT_CAINFO] = $ca;
+    }
+    return $opts;
+}
+
+/**
+ * Petakan error OpenAI / curl ke pesan admin yang actionable.
+ */
+function wa_booking_explain_ai_failure(int $httpCode, string $body, string $curlErr = ''): string
+{
+    if ($curlErr !== '') {
+        $low = strtolower($curlErr);
+        if (str_contains($low, 'ssl') || str_contains($low, 'certificate') || str_contains($low, 'cacert')) {
+            $hint = wa_booking_curl_cainfo()
+                ? 'Pastikan config/cacert.pem terbaca server.'
+                : 'Tambahkan Mozilla CA bundle di config/cacert.pem (unduh dari https://curl.se/ca/cacert.pem).';
+            return 'Koneksi SSL gagal ke API (' . wa_booking_sanitize_ai_error($curlErr) . '). ' . $hint;
+        }
+        if (str_contains($low, 'timed out') || str_contains($low, 'timeout')) {
+            return 'Timeout memanggil API. Coba gambar lebih kecil atau ulangi.';
+        }
+        if (str_contains($low, 'could not resolve') || str_contains($low, 'failed to connect')) {
+            return 'Tidak bisa terhubung ke API (' . wa_booking_sanitize_ai_error($curlErr) . '). Cek outbound HTTPS di hosting.';
+        }
+        return 'cURL: ' . wa_booking_sanitize_ai_error($curlErr);
+    }
+
+    $j = json_decode($body, true);
+    $apiMsg = '';
+    $apiCode = '';
+    $apiType = '';
+    if (is_array($j) && isset($j['error']) && is_array($j['error'])) {
+        $apiMsg = (string)($j['error']['message'] ?? '');
+        $apiCode = (string)($j['error']['code'] ?? '');
+        $apiType = (string)($j['error']['type'] ?? '');
+    }
+    $apiMsg = wa_booking_sanitize_ai_error($apiMsg);
+    $hint = $apiCode !== '' ? $apiCode : ($apiType !== '' ? $apiType : '');
+
+    if ($httpCode === 401 || $apiCode === 'invalid_api_key' || str_contains(strtolower($apiMsg), 'incorrect api key')) {
+        return 'API key tidak valid (invalid_api_key). Periksa OPENAI_API_KEY di file .env root project.';
+    }
+    if ($apiCode === 'insufficient_quota' || str_contains(strtolower($apiMsg), 'quota') || str_contains(strtolower($apiMsg), 'billing hard limit')) {
+        return 'Kuota/billing OpenAI habis (insufficient_quota). Isi billing di platform.openai.com atau ganti key.';
+    }
+    if ($httpCode === 429 || $apiCode === 'rate_limit_exceeded') {
+        return 'Rate limit OpenAI. Tunggu sebentar lalu coba lagi.';
+    }
+    if ($httpCode === 404 || (str_contains(strtolower($apiMsg), 'model') && str_contains(strtolower($apiMsg), 'not'))) {
+        return 'Model tidak ditemukan (' . (AI_MODEL ?: '?') . '). Set AI_MODEL=gpt-4o-mini di .env.';
+    }
+    if ($httpCode === 413 || str_contains(strtolower($apiMsg), 'too large') || str_contains(strtolower($apiMsg), 'maximum')) {
+        return 'Gambar terlalu besar untuk API. Pakai screenshot lebih kecil atau tempel teks chat.';
+    }
+    if ($httpCode >= 500) {
+        return 'Server OpenAI error (HTTP ' . $httpCode . '). Coba lagi nanti.';
+    }
+    if ($apiMsg !== '') {
+        return ($hint !== '' ? "[{$hint}] " : '') . $apiMsg . ($httpCode ? " (HTTP {$httpCode})" : '');
+    }
+    if ($httpCode > 0) {
+        return 'HTTP ' . $httpCode . ' dari API tanpa detail.';
+    }
+    return 'Respons API kosong/tidak valid.';
+}
+
+/**
+ * Siapkan gambar untuk vision: validasi, resize/kompres (GD) → JPEG/PNG base64.
+ *
+ * @return array{mime:string,base64:string}|null
+ */
+function wa_booking_prepare_image_from_file(string $tmpPath, string $mime): ?array
+{
+    if (!is_readable($tmpPath)) {
+        wa_booking_ai_last_error('File upload tidak bisa dibaca di server.');
+        return null;
+    }
+    $bin = file_get_contents($tmpPath);
+    if ($bin === false || $bin === '') {
+        wa_booking_ai_last_error('Isi file screenshot kosong.');
+        return null;
+    }
+
+    $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!in_array($mime, $allowed, true)) {
+        wa_booking_ai_last_error('Format gambar harus JPG, PNG, WEBP, atau GIF.');
+        return null;
+    }
+
+    // Kompres jika GD ada dan gambar besar / dimensi lebar
+    if (extension_loaded('gd')) {
+        $compressed = wa_booking_compress_image_bin($bin, $mime);
+        if (is_array($compressed)) {
+            return $compressed;
+        }
+    }
+
+    // Fallback: kirim as-is (batasi ~3.5MB binary ≈ aman untuk JSON base64)
+    if (strlen($bin) > 3500 * 1024) {
+        wa_booking_ai_last_error('Gambar terlalu besar setelah upload. Aktifkan ekstensi GD di PHP untuk kompres otomatis, atau pakai file < 2 MB.');
+        return null;
+    }
+
+    return [
+        'mime' => $mime,
+        'base64' => base64_encode($bin),
+    ];
+}
+
+/**
+ * Resize max sisi 1600px + JPEG quality ~82. Return null jika gagal (caller pakai original).
+ *
+ * @return array{mime:string,base64:string}|null
+ */
+function wa_booking_compress_image_bin(string $bin, string $mime): ?array
+{
+    $img = @imagecreatefromstring($bin);
+    if ($img === false) {
+        return null;
+    }
+    $w = imagesx($img);
+    $h = imagesy($img);
+    if ($w < 1 || $h < 1) {
+        imagedestroy($img);
+        return null;
+    }
+
+    $maxSide = 1600;
+    $scale = 1.0;
+    if ($w > $maxSide || $h > $maxSide) {
+        $scale = min($maxSide / $w, $maxSide / $h);
+    }
+    // Jika sudah kecil (< 900KB) dan tidak perlu resize, tetap konversi JPEG agar konsisten
+    $needResize = $scale < 1.0;
+    $needCompress = strlen($bin) > 900 * 1024;
+
+    if ($needResize) {
+        $nw = max(1, (int)round($w * $scale));
+        $nh = max(1, (int)round($h * $scale));
+        $dst = imagecreatetruecolor($nw, $nh);
+        if ($dst === false) {
+            imagedestroy($img);
+            return null;
+        }
+        imagealphablending($dst, true);
+        imagesavealpha($dst, false);
+        $white = imagecolorallocate($dst, 255, 255, 255);
+        imagefill($dst, 0, 0, $white);
+        imagecopyresampled($dst, $img, 0, 0, 0, 0, $nw, $nh, $w, $h);
+        imagedestroy($img);
+        $img = $dst;
+    } elseif (!$needCompress && in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+        imagedestroy($img);
+        return [
+            'mime' => $mime,
+            'base64' => base64_encode($bin),
+        ];
+    }
+
+    ob_start();
+    imagejpeg($img, null, 82);
+    $out = ob_get_clean();
+    imagedestroy($img);
+    if ($out === false || $out === '') {
+        return null;
+    }
+
+    return [
+        'mime' => 'image/jpeg',
+        'base64' => base64_encode($out),
+    ];
+}
+
+/**
  * Panggil OpenAI-compatible Chat Completions (teks dan/atau vision).
  *
  * @return array|null fields atau null jika gagal
  */
 function wa_booking_parse_ai(string $text, ?array $image = null): ?array
 {
-    if (!wa_booking_ai_available()) return null;
+    if (!wa_booking_ai_available()) {
+        wa_booking_ai_last_error('OPENAI_API_KEY kosong. Tambahkan di .env root project.');
+        return null;
+    }
 
     $ruteNames = [];
     foreach (get_rutes(false) as $r) {
@@ -548,10 +820,22 @@ SYS;
     $content[] = ['type' => 'text', 'text' => $userText];
     if ($image && !empty($image['base64']) && !empty($image['mime'])) {
         $mime = preg_replace('/[^a-z0-9.+\-\/]/i', '', (string)$image['mime']) ?: 'image/jpeg';
+        $b64 = preg_replace('/\s+/', '', (string)$image['base64']) ?? '';
+        if ($b64 === '' || !preg_match('#^image/(jpeg|png|webp|gif)$#i', $mime)) {
+            wa_booking_ai_last_error('Data gambar tidak valid (mime/base64).');
+            return null;
+        }
+        // Hindari double data-URL jika caller sudah kirim prefix
+        if (str_starts_with($b64, 'data:')) {
+            $dataUrl = $b64;
+        } else {
+            $dataUrl = 'data:' . $mime . ';base64,' . $b64;
+        }
         $content[] = [
             'type' => 'image_url',
             'image_url' => [
-                'url' => 'data:' . $mime . ';base64,' . $image['base64'],
+                'url' => $dataUrl,
+                'detail' => 'low',
             ],
         ];
     }
@@ -559,6 +843,7 @@ SYS;
     $payload = [
         'model' => AI_MODEL,
         'temperature' => 0.1,
+        'max_tokens' => 1200,
         'response_format' => ['type' => 'json_object'],
         'messages' => [
             ['role' => 'system', 'content' => $system],
@@ -567,30 +852,24 @@ SYS;
     ];
 
     $url = AI_BASE_URL . '/chat/completions';
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
-    if ($json === false) return null;
+    $flags = JSON_UNESCAPED_UNICODE;
+    if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) {
+        $flags |= JSON_INVALID_UTF8_SUBSTITUTE;
+    }
+    $json = json_encode($payload, $flags);
+    if ($json === false) {
+        wa_booking_ai_last_error('Gagal encode JSON request (gambar mungkin terlalu besar): ' . json_last_error_msg());
+        return null;
+    }
 
     $raw = null;
-    if (function_exists('curl_init')) {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_POST => true,
-            CURLOPT_HTTPHEADER => [
-                'Content-Type: application/json',
-                'Authorization: Bearer ' . OPENAI_API_KEY,
-            ],
-            CURLOPT_POSTFIELDS => $json,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 60,
-            CURLOPT_CONNECTTIMEOUT => 15,
-        ]);
-        $raw = curl_exec($ch);
-        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        if ($raw === false || $code < 200 || $code >= 300) {
-            // Retry tanpa response_format (beberapa provider tidak support)
-            unset($payload['response_format']);
-            $json2 = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    $httpCode = 0;
+    $curlErr = '';
+
+    $doRequest = static function (string $body) use ($url, &$httpCode, &$curlErr): string|false {
+        $httpCode = 0;
+        $curlErr = '';
+        if (function_exists('curl_init')) {
             $ch = curl_init($url);
             curl_setopt_array($ch, [
                 CURLOPT_POST => true,
@@ -598,33 +877,88 @@ SYS;
                     'Content-Type: application/json',
                     'Authorization: Bearer ' . OPENAI_API_KEY,
                 ],
-                CURLOPT_POSTFIELDS => $json2,
+                CURLOPT_POSTFIELDS => $body,
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => 60,
-            ]);
+                CURLOPT_TIMEOUT => 90,
+                CURLOPT_CONNECTTIMEOUT => 20,
+            ] + wa_booking_curl_ssl_opts());
             $raw = curl_exec($ch);
-            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            if ($raw === false) {
+                $curlErr = (string)curl_error($ch);
+            }
             curl_close($ch);
-            if ($raw === false || $code < 200 || $code >= 300) return null;
+            return $raw;
         }
-    } else {
+
         $ctx = stream_context_create([
             'http' => [
                 'method' => 'POST',
                 'header' => "Content-Type: application/json\r\nAuthorization: Bearer " . OPENAI_API_KEY . "\r\n",
-                'content' => $json,
-                'timeout' => 60,
+                'content' => $body,
+                'timeout' => 90,
                 'ignore_errors' => true,
             ],
         ]);
         $raw = @file_get_contents($url, false, $ctx);
-        if ($raw === false) return null;
+        if (isset($http_response_header) && is_array($http_response_header)) {
+            foreach ($http_response_header as $h) {
+                if (preg_match('#^HTTP/\S+\s+(\d+)#', $h, $m)) {
+                    $httpCode = (int)$m[1];
+                    break;
+                }
+            }
+        }
+        if ($raw === false) {
+            $curlErr = 'file_get_contents gagal (allow_url_fopen / jaringan).';
+        }
+        return $raw;
+    };
+
+    $raw = $doRequest($json);
+    $okHttp = $raw !== false && $httpCode >= 200 && $httpCode < 300;
+
+    // Retry tanpa response_format (beberapa provider / model lama tidak support)
+    if (!$okHttp) {
+        $firstExplain = wa_booking_explain_ai_failure($httpCode, is_string($raw) ? $raw : '', $curlErr);
+        // Jangan retry untuk auth/quota/model — buang-buang request
+        $noRetry = (bool)preg_match('/invalid_api_key|insufficient_quota|rate_limit|Model tidak ditemukan|API key tidak valid|Kuota\/billing/i', $firstExplain);
+        if (!$noRetry) {
+            unset($payload['response_format']);
+            $json2 = json_encode($payload, $flags);
+            if ($json2 !== false) {
+                $raw = $doRequest($json2);
+                $okHttp = $raw !== false && $httpCode >= 200 && $httpCode < 300;
+            }
+        }
+        if (!$okHttp) {
+            wa_booking_ai_last_error(
+                wa_booking_explain_ai_failure($httpCode, is_string($raw) ? $raw : '', $curlErr) ?: $firstExplain
+            );
+            return null;
+        }
     }
 
-    $decoded = json_decode($raw, true);
-    if (!is_array($decoded)) return null;
+    $decoded = json_decode((string)$raw, true);
+    if (!is_array($decoded)) {
+        wa_booking_ai_last_error('Respons API bukan JSON valid.');
+        return null;
+    }
+    if (isset($decoded['error'])) {
+        wa_booking_ai_last_error(wa_booking_explain_ai_failure($httpCode, (string)$raw, ''));
+        return null;
+    }
+
     $contentOut = $decoded['choices'][0]['message']['content'] ?? '';
-    if (!is_string($contentOut) || $contentOut === '') return null;
+    $refusal = $decoded['choices'][0]['message']['refusal'] ?? null;
+    if (is_string($refusal) && $refusal !== '') {
+        wa_booking_ai_last_error('Model menolak memproses gambar: ' . wa_booking_sanitize_ai_error($refusal));
+        return null;
+    }
+    if (!is_string($contentOut) || $contentOut === '') {
+        wa_booking_ai_last_error('Respons AI kosong (tidak ada content).');
+        return null;
+    }
 
     // Strip ```json fences jika ada
     $contentOut = trim($contentOut);
@@ -633,7 +967,10 @@ SYS;
     }
 
     $data = json_decode($contentOut, true);
-    if (!is_array($data)) return null;
+    if (!is_array($data)) {
+        wa_booking_ai_last_error('AI tidak mengembalikan JSON field booking yang valid.');
+        return null;
+    }
 
     $out = wa_booking_empty_fields();
     foreach ($out as $k => $_) {
