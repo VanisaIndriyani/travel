@@ -71,6 +71,82 @@ $nm = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','Se
     </section>
 </div>
 
+<?php
+$aiReady = defined('OPENAI_API_KEY') && OPENAI_API_KEY !== '';
+?>
+<section class="ai-assist no-print" id="ai-asisten">
+    <div class="ai-assist-head">
+        <div class="ai-assist-ico"><i class="fa-solid fa-robot"></i></div>
+        <div class="min-w-0 flex-1">
+            <h2 class="ai-assist-title">Asisten hitung data</h2>
+            <p class="ai-assist-desc">Tanya pendapatan / penumpang per rute &amp; periode. Contoh: <em>“Pendapatan Blora Surabaya bulan ini berapa?”</em></p>
+        </div>
+        <span class="ai-assist-badge"><?= $aiReady ? 'AI + lokal' : 'Hitung lokal' ?></span>
+    </div>
+    <div class="ai-assist-chips">
+        <button type="button" class="ai-chip" data-q="Pendapatan Blora Surabaya bulan ini berapa?">Blora–Surabaya bulan ini</button>
+        <button type="button" class="ai-chip" data-q="Total penumpang hari ini berapa?">Penumpang hari ini</button>
+        <button type="button" class="ai-chip" data-q="Pendapatan semua rute bulan ini berapa?">Semua rute bulan ini</button>
+        <button type="button" class="ai-chip" data-q="Berapa booking pending?">Booking pending</button>
+    </div>
+    <form id="aiAssistForm" class="ai-assist-form" autocomplete="off">
+        <input type="text" id="aiAssistInput" name="question" maxlength="500" required
+               placeholder="Contoh: cari data Blora Surabaya bulan ini total penumpang &amp; pendapatan…"
+               class="ai-assist-input">
+        <button type="submit" class="ai-assist-btn" id="aiAssistBtn">
+            <i class="fa-solid fa-calculator"></i> Hitung
+        </button>
+    </form>
+    <div id="aiAssistOut" class="ai-assist-out" hidden></div>
+</section>
+<script>
+(function () {
+    var form = document.getElementById('aiAssistForm');
+    var input = document.getElementById('aiAssistInput');
+    var out = document.getElementById('aiAssistOut');
+    var btn = document.getElementById('aiAssistBtn');
+    var url = <?= json_encode(BASE_URL . '/admin/proses_ai_tanya.php') ?>;
+
+    document.querySelectorAll('.ai-chip').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            input.value = chip.getAttribute('data-q') || '';
+            form.requestSubmit();
+        });
+    });
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var q = (input.value || '').trim();
+        if (!q) return;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menghitung…';
+        out.hidden = false;
+        out.className = 'ai-assist-out is-loading';
+        out.textContent = 'Mengambil data dari database…';
+
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ question: q }),
+            credentials: 'same-origin'
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            out.className = 'ai-assist-out ' + (data.ok ? 'is-ok' : 'is-err');
+            out.textContent = data.answer || 'Tidak ada jawaban.';
+        })
+        .catch(function () {
+            out.className = 'ai-assist-out is-err';
+            out.textContent = 'Gagal menghubungi server. Coba lagi.';
+        })
+        .finally(function () {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-calculator"></i> Hitung';
+        });
+    });
+})();
+</script>
+
 <div class="dash-kpi">
     <?php
     $stats = [
