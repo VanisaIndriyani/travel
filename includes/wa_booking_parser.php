@@ -167,6 +167,8 @@ function wa_booking_parse_rules(string $text): array
     $fields = wa_booking_empty_fields();
     $raw = str_replace(["\r\n", "\r"], "\n", $text);
     $raw = preg_replace("/[ \t]+/u", ' ', $raw) ?? $raw;
+    // Buang emoji/simbol dekorasi di awal baris (form WA sering pakai 🧑📱🏠 dll)
+    $raw = preg_replace('/^[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{FE0F}\x{200D}\s️*•\-]+/mu', '', $raw) ?? $raw;
 
     // Maps link dulu (sebelum dipotong)
     if (preg_match('#(https?://(?:www\.)?(?:google\.[a-z.]+/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl/maps)[^\s<>"\']*)#i', $raw, $m)) {
@@ -178,25 +180,32 @@ function wa_booking_parse_rules(string $text): array
     $labeled = [
         'nama' => 'nama(?:\s*lengkap)?|penumpang|atas\s*nama|a\.?\s*n\.?',
         'no_hp' => 'no\.?\s*(?:hp|wa|whatsapp|telp|telepon)|hp|wa|whatsapp|telepon|kontak',
-        'alamat_jemput' => 'alamat\s*(?:jemput|penjemputan|pickup|asal)|jemput(?:an)?|lokasi\s*jemput|pickup',
+        'alamat_jemput' => 'alamat\s*(?:jemput|penjemputan|pickup|asal)|jemput(?:an)?|lokasi\s*jemput|pickup|penjemputan',
         'alamat_tujuan' => 'alamat\s*(?:tujuan|drop|sampai)|tujuan|drop\s*off|antar(?:an)?',
-        'rute' => 'rute|jurusan|tujuan\s*perjalanan|trayek',
-        'tanggal_berangkat' => 'tanggal(?:\s*berangkat)?|tgl(?:\s*berangkat)?|date|berangkat(?:\s*tgl)?',
-        'jumlah_kursi' => 'jumlah(?:\s*kursi|\s*orang|\s*pax)?|kursi|seat|pax|orang',
-        'jam_jemput' => 'jam(?:\s*jemput|\s*berangkat)?|waktu|pukul',
+        'rute' => 'rute|jurusan|tujuan\s*perjalanan|trayek|tiket',
+        'tanggal_berangkat' => 'hari\s*&?\s*tanggal|tanggal(?:\s*berangkat)?|tgl(?:\s*berangkat)?|date|berangkat(?:\s*tgl)?',
+        'jumlah_kursi' => 'jumlah\s*(?:seat|kursi|orang|pax)|jumlah(?:\s*kursi|\s*orang|\s*pax)?|kursi|seat(?:\s*[\/]\s*kursi)?|pax|orang',
+        'jam_jemput' => 'estimasi\s*jam(?:\s*jemput)?|jam(?:\s*jemput|\s*berangkat)?|waktu|pukul',
         'jadwal_jemput' => 'jadwal(?:\s*jemput|\s*berangkat)?',
         'barang_bawaan' => 'barang(?:\s*bawaan)?|bawaan|koper|luggage|kardus',
         'lokasi_jemput' => 'lokasi(?:\s*area)?(?:\s*jemput)?|area\s*jemput|kota\s*jemput',
         'catatan_admin' => 'catatan|note|keterangan|ket\.?|info\s*tambahan',
     ];
 
+    $labelAlt = implode('|', $labeled);
+    // Izinkan sisa emoji/simbol sebelum label (kalau strip di atas belum habis)
+    $prefix = '(?:^|\n)\s*(?:[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}\x{FE0F}\x{200D}\s️*•\-]*)?';
+
     foreach ($labeled as $field => $pattern) {
-        if (preg_match('/(?:^|\n)\s*(?:' . $pattern . ')\s*[:\-=]\s*(.+?)(?=\n\s*(?:' . implode('|', $labeled) . ')\s*[:\-=]|\n\s*\n|$)/isu', $raw, $m)) {
+        // Pakai delimiter # supaya "/" di pola seat tidak merusak regex
+        $re = '#' . $prefix . '(?:' . $pattern . ')\s*[:\-=]\s*(.+?)(?=' . $prefix . '(?:' . $labelAlt . ')\s*[:\-=]|\n\s*\n|$)#isu';
+        if (preg_match($re, $raw, $m)) {
             $val = trim($m[1]);
             $val = preg_replace('#https?://\S+#i', '', $val) ?? $val;
             $val = preg_replace('/\s+/u', ' ', $val) ?? $val;
             $val = trim($val);
-            if ($val !== '') {
+            // Abaikan nilai kosong form template
+            if ($val !== '' && !preg_match('/^[\-\–—_\.]+$/', $val)) {
                 $fields[$field] = $val;
             }
         }
@@ -212,9 +221,9 @@ function wa_booking_parse_rules(string $text): array
         $lines = preg_split('/\n+/', $raw) ?: [];
         foreach ($lines as $line) {
             $line = trim($line);
-            if ($line === '' || preg_match('/https?:\/\//i', $line)) continue;
-            if (preg_match('/^(?:' . implode('|', $labeled) . ')\s*[:\-=]/iu', $line)) continue;
-            if (preg_match('/^\d/') || preg_match('/(?:\+?62|0)\d{8,}/', $line)) continue;
+            if ($line === '' || preg_match('#https?://#i', $line)) continue;
+            if (preg_match('#^(?:' . implode('|', $labeled) . ')\s*[:\-=]#iu', $line)) continue;
+            if (preg_match('/^\d/', $line) || preg_match('/(?:\+?62|0)\d{8,}/', $line)) continue;
             if (mb_strlen($line) >= 3 && mb_strlen($line) <= 60 && preg_match('/^[\p{L}\s\.\'\-]+$/u', $line)) {
                 $fields['nama'] = $line;
                 break;

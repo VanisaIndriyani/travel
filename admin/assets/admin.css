@@ -657,6 +657,63 @@ input.peer:checked + .bk-loc {
 }
 .bk-pill.is-on { background: #0A1628; color: #F5EBD0; border-color: #0A1628; }
 
+/* Navigasi hari booking */
+.bk-day-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    margin: 0 0 0.75rem;
+    flex-wrap: wrap;
+}
+.bk-day-btn {
+    width: 2.35rem;
+    height: 2.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.75rem;
+    border: 1.5px solid #E5D9B8;
+    background: #fff;
+    color: #0A1628;
+    text-decoration: none;
+    transition: 0.15s ease;
+}
+.bk-day-btn:hover {
+    border-color: #C9A227;
+    background: #FFFDF8;
+}
+.bk-day-label {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 11rem;
+    justify-content: center;
+}
+.bk-day-date {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #0A1628;
+    letter-spacing: -0.02em;
+}
+.bk-day-badge {
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.18rem 0.45rem;
+    border-radius: 999px;
+    background: #0A1628;
+    color: #F5EBD0;
+}
+.bk-day-today {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #8B6914;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 /* ---------- Tabs / chips ---------- */
 .tab-btn {
     padding: 0.65rem 1rem;
@@ -1466,7 +1523,7 @@ input.peer:checked + .bk-loc {
     body.admin-body { background: #fff !important; }
     .no-print, .no-print * { display: none !important; }
     .print-only { display: block !important; }
-    .dash-hero, .bk-pills, #pdf-print { display: none !important; }
+    .dash-hero, .bk-pills, .bk-day-nav, #pdf-print { display: none !important; }
     .card, table.admin-table { box-shadow: none !important; border: 1px solid #d1d5db; background: #fff !important; }
     table.admin-table { min-width: 0 !important; }
     table.admin-table th { background: #0A1628 !important; color: #F5EBD0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -1924,4 +1981,159 @@ input.peer:checked + .bk-loc {
 }
 .ai-assist-out.is-ok {
     border: 1px solid rgba(201, 162, 39, 0.35);
+}
+
+/* ===== Kirim daftar penumpang → driver (laporan harian) ===== */
+.trip-driver-wrap {
+    border-top: 1px solid #E8DFC8;
+    background: linear-gradient(180deg, #FFFDF8 0%, #F7F3EB 100%);
+}
+.trip-driver-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 0.9rem;
+    padding-top: 0.25rem;
+}
+@media (min-width: 720px) {
+    .trip-driver-head {
+        flex-direction: row;
+        align-items: flex-end;
+        justify-content: space-between;
+    }
+}
+.trip-driver-title {
+    margin: 0;
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: #0A1628;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+.trip-driver-desc {
+    margin: 0.25rem 0 0;
+    font-size: 0.72rem;
+    color: #5B6B7C;
+    font-weight: 500;
+    line-height: 1.4;
+    max-width: 36rem;
+}
+.trip-copy-all {
+    min-height: 44px;
+    white-space: nowrap;
+}
+.trip-driver-preview {
+    margin: 0;
+    padding: 0.9rem 1rem;
+    border-radius: 0.95rem;
+    border: 1px solid #E5D9B8;
+    background: #fff;
+    color: #0A1628;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    max-height: 22rem;
+    overflow: auto;
+}
+.trip-driver-hint {
+    margin: 0.55rem 0 0;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #5B6B7C;
+}
+
+/* Pilih 1 PP (setoran) */
+.lap-pp-pick {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    text-align: left;
+    padding: 0.85rem 1rem;
+    border-radius: 0.95rem;
+    border: 1.5px solid #E5D9B8;
+    background: #fff;
+    cursor: pointer;
+    transition: 0.15s ease;
+}
+.lap-pp-pick:hover {
+    border-color: #C9A227;
+    background: #FFFDF8;
+    box-shadow: 0 6px 16px rgba(15, 30, 55, 0.06);
+}
+
+/* Pilih booking manual (setoran) */
+.lap-pick-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: min(52vh, 420px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-right: 0.15rem;
+}
+.lap-pick-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    border: 1.5px solid #E5D9B8;
+    border-radius: 0.9rem;
+    background: #fff;
+    padding: 0.7rem 0.75rem;
+    transition: 0.12s ease;
+}
+.lap-pick-card.is-on {
+    border-color: #C9A227;
+    background: #FFFDF5;
+    box-shadow: 0 6px 14px rgba(15, 30, 55, 0.06);
+}
+.lap-pick-card.is-used {
+    opacity: 0.55;
+    background: #f8fafc;
+}
+.lap-pick-check {
+    flex-shrink: 0;
+    padding-top: 0.15rem;
+}
+.lap-pick-check input {
+    width: 1.15rem;
+    height: 1.15rem;
+    accent-color: #0A1628;
+    cursor: pointer;
+}
+.lap-pick-side {
+    flex-shrink: 0;
+    width: 7.2rem;
+}
+.lap-pick-side .lap-pax-arah {
+    width: 100%;
+    min-height: 34px;
+    font-size: 0.72rem;
+    padding: 0.25rem 0.35rem;
+}
+.lap-pick-side .lap-pax-fee {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.lap-pick-side .lap-pax-fee label {
+    font-size: 0.58rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+}
+.lap-pick-side .lap-pax-fee input {
+    width: 100%;
+    min-height: 32px;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 700;
 }

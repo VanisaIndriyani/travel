@@ -35,6 +35,54 @@ try {
     }
 } catch (PDOException $e) { /* abaikan */ }
 
+// Daftar penumpang per keberangkatan (untuk kirim ke driver) — pending/confirmed/completed
+$lHari_trips = [];
+$lHari_tripBookings = [];
+try {
+    $stmt = $pdo->prepare("SELECT * FROM bookings
+        WHERE tanggal_berangkat = ?
+          AND status IN ('pending','confirmed','completed')
+        ORDER BY jam_jemput ASC, id ASC");
+    $stmt->execute([$lHari_tanggal]);
+    $lHari_tripBookings = $stmt->fetchAll();
+} catch (PDOException $e) {
+    $lHari_tripBookings = [];
+}
+
+foreach ($lHari_tripBookings as $b) {
+    $jam = substr((string)($b['jam_jemput'] ?? '00:00:00'), 0, 5);
+    if ($jam === '' || $jam === false) {
+        $jam = '00:00';
+    }
+    $jamLabel = str_replace(':', '.', $jam); // 11.00
+    $rute = trim((string)($b['rute'] ?? ''));
+    if ($rute === '') {
+        $lok = trim((string)($b['lokasi_jemput'] ?? 'Blora'));
+        $rute = $lok . ' - Tujuan';
+    }
+    $key = $jam . '|' . mb_strtolower($rute);
+    if (!isset($lHari_trips[$key])) {
+        $lHari_trips[$key] = [
+            'jam' => $jam,
+            'jam_label' => $jamLabel,
+            'rute' => $rute,
+            'penumpang' => [],
+            'total_kursi' => 0,
+        ];
+    }
+    $kursi = max(1, (int)($b['jumlah_kursi'] ?? 1));
+    $lHari_trips[$key]['penumpang'][] = [
+        'nama' => (string)($b['nama'] ?? '-'),
+        'kursi' => $kursi,
+        'hp' => (string)($b['no_hp'] ?? ''),
+        'jemput' => (string)($b['alamat_jemput'] ?? ''),
+        'status' => (string)($b['status'] ?? ''),
+    ];
+    $lHari_trips[$key]['total_kursi'] += $kursi;
+}
+
+$waDriverDefault = preg_replace('/[^0-9]/', '', defined('WA_DRIVER') ? WA_DRIVER : WA_ADMIN);
+
 // ==================================================================
 // TAB 2: LAPORAN MINGGUAN
 // ==================================================================
@@ -163,6 +211,8 @@ $namaBulan = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agust
                 <input type="date" name="lhari_tgl" value="<?= $lHari_tanggal ?>" class="input-field">
             </div>
             <div class="filter-actions">
+                <a href="?tab=harian&lhari_tgl=<?= e($today) ?>" class="btn-secondary"><i class="fa-solid fa-sun"></i> Hari ini</a>
+                <a href="?tab=harian&lhari_tgl=<?= e(date('Y-m-d', strtotime('+1 day'))) ?>" class="btn-secondary"><i class="fa-solid fa-moon"></i> Besok</a>
                 <button type="submit" class="btn-primary"><i class="fa-solid fa-magnifying-glass"></i> Tampilkan</button>
                 <button type="button" class="btn-success js-pdf"
                     data-pdf-target="#pdf-print"
@@ -207,13 +257,65 @@ $namaBulan = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agust
     <div class="no-print px-4 pb-3 sm:px-5 flex flex-col sm:flex-row gap-2">
         <button type="button" class="btn-primary w-full sm:w-auto"
                 onclick="window.modalSetoran && window.modalSetoran.open('<?= e($lHari_tanggal) ?>')">
-            <i class="fa-solid fa-receipt"></i> Detail setoran &amp; fee agen
+            <i class="fa-solid fa-receipt"></i> Setoran per 1 PP
         </button>
         <button type="button" class="btn-secondary w-full sm:w-auto js-lap-copy"
                 data-tanggal="<?= e($lHari_tanggal) ?>">
-            <i class="fa-regular fa-copy"></i> Salin ringkasan
+            <i class="fa-regular fa-copy"></i> Salin ringkasan setoran
         </button>
     </div>
+
+    <?php
+    // Satu ringkasan semua keberangkatan tanggal ini (untuk tempel ke driver)
+    $tripAllLines = [];
+    $tripAllKursi = 0;
+    if (!empty($lHari_trips)) {
+        $tripAllLines[] = 'Daftar keberangkatan Mustika Travel';
+        $tripAllLines[] = nama_hari($lHari_tanggal) . ', ' . tgl_id($lHari_tanggal);
+        $tripAllLines[] = '';
+        foreach ($lHari_trips as $trip) {
+            $tripAllLines[] = 'Jam ' . $trip['jam_label'] . ' · ' . $trip['rute'];
+            $n = 0;
+            foreach ($trip['penumpang'] as $p) {
+                $n++;
+                $extra = $p['kursi'] > 1 ? ' (' . $p['kursi'] . ' kursi)' : '';
+                $tripAllLines[] = $n . '. ' . $p['nama'] . $extra;
+            }
+            $tripAllLines[] = $trip['total_kursi'] . ' penumpang';
+            $tripAllLines[] = '';
+            $tripAllKursi += (int)$trip['total_kursi'];
+        }
+        $tripAllLines[] = 'Total keseluruhan: ' . $tripAllKursi . ' penumpang';
+        $tripAllLines[] = '— Mustika Travel';
+    }
+    $pesanSemuaTrip = implode("\n", $tripAllLines);
+    ?>
+
+    <!-- Satu ringkasan: semua yang berangkat di tanggal ini → salin saja -->
+    <section class="no-print trip-driver-wrap px-4 sm:px-5 pb-5">
+        <div class="trip-driver-head">
+            <div>
+                <h3 class="trip-driver-title"><i class="fa-solid fa-clipboard-list text-gold-600"></i> Daftar berangkat (1 ringkasan)</h3>
+                <p class="trip-driver-desc">Semua jam &amp; rute digabung jadi satu teks. Pilih tanggal (mis. <b>Besok</b>) → <b>Salin semua</b> → tempel ke driver.</p>
+            </div>
+            <?php if (!empty($lHari_trips)): ?>
+            <button type="button" class="btn-success js-trip-copy trip-copy-all" data-pesan="<?= e($pesanSemuaTrip) ?>">
+                <i class="fa-regular fa-copy"></i> Salin semua
+            </button>
+            <?php endif; ?>
+        </div>
+
+        <?php if (empty($lHari_trips)): ?>
+            <div class="empty-state !py-8">
+                <div class="empty-state-icon"><i class="fa-solid fa-van-shuttle"></i></div>
+                <div class="font-semibold text-slate-600">Belum ada penumpang untuk tanggal ini.</div>
+                <div class="text-xs text-slate-400 mt-1">Yang dihitung: status pending, terkonfirmasi, dan selesai.</div>
+            </div>
+        <?php else: ?>
+            <pre class="trip-driver-preview" id="tripDriverPreview"><?= e($pesanSemuaTrip) ?></pre>
+            <p class="trip-driver-hint"><?= count($lHari_trips) ?> keberangkatan · <?= (int)$tripAllKursi ?> penumpang</p>
+        <?php endif; ?>
+    </section>
 
     <!-- Tabel Detail -->
     <div class="table-wrap is-cards is-sticky-col !rounded-none !border-0">
@@ -231,13 +333,38 @@ $namaBulan = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agust
                 </tr>
             </thead>
             <tbody>
-                <?php if (empty($lHari_data)): ?>
+                <?php if (empty($lHari_tripBookings)): ?>
                     <tr><td colspan="8">
                         <div class="empty-state">
                             <div class="empty-state-icon"><i class="fa-solid fa-chart-column"></i></div>
-                            <div class="font-semibold text-slate-600">Belum ada perjalanan selesai di tanggal ini.</div>
+                            <div class="font-semibold text-slate-600">Belum ada penumpang di tanggal ini.</div>
                         </div>
                     </td></tr>
+                <?php elseif (empty($lHari_data) && !empty($lHari_tripBookings)): ?>
+                    <?php $no=0; foreach ($lHari_tripBookings as $b): $no++;
+                        [$sLabel, $sClass] = status_booking($b['status']);
+                    ?>
+                    <tr>
+                        <td class="font-bold text-slate-600"><?= $no ?>.</td>
+                        <td class="font-bold text-slate-900">#MT-<?= (int)$b['id'] ?></td>
+                        <td class="whitespace-nowrap"><span class="chip bg-blue-50 text-blue-700 !px-3 !py-1 font-bold"><i class="fa-regular fa-clock mr-1.5"></i><?= e(substr($b['jam_jemput'],0,5)) ?></span></td>
+                        <td class="font-semibold text-slate-900"><?= e($b['nama']) ?></td>
+                        <td class="text-slate-600 text-sm"><?= e($b['no_hp']) ?></td>
+                        <td class="text-xs leading-relaxed">
+                            <div class="font-bold text-navy-800 mb-1"><?= e($b['rute'] ?: '—') ?></div>
+                            <div class="mb-1 flex gap-1.5 items-start"><i class="fa-solid fa-circle-dot text-primary-500 text-[8px] mt-1.5"></i><span><?= e(mb_strimwidth($b['alamat_jemput'],0,40,'...')) ?></span></div>
+                            <div class="flex gap-1.5 items-start"><i class="fa-solid fa-location-dot text-red-500 text-[10px] mt-1"></i><span><?= e(mb_strimwidth($b['alamat_tujuan'],0,40,'...')) ?></span></div>
+                            <div class="mt-1"><span class="badge <?= $sClass ?>"><?= $sLabel ?></span></div>
+                        </td>
+                        <td class="text-center font-bold text-slate-800"><?= (int)$b['jumlah_kursi'] ?></td>
+                        <td class="text-right font-extrabold text-primary-700 whitespace-nowrap"><?= rupiah((int)$b['total_harga']) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <tr>
+                        <td colspan="8" class="!py-3 bg-amber-50 text-amber-900 text-xs font-semibold text-center">
+                            Belum ada yang berstatus <b>Selesai</b> — pendapatan di atas masih Rp 0. Daftar berangkat &amp; salinan untuk driver sudah memakai data di tabel ini.
+                        </td>
+                    </tr>
                 <?php else: $no=0; foreach($lHari_data as $b): $no++; ?>
                     <tr>
                         <td class="font-bold text-slate-600"><?= $no ?>.</td>
@@ -254,7 +381,7 @@ $namaBulan = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agust
                     </tr>
                 <?php endforeach; ?>
                     <tr class="lap-total-row">
-                        <td colspan="7" class="text-right font-extrabold text-navy-900 text-sm uppercase tracking-wide !py-4">Total pendapatan hari ini</td>
+                        <td colspan="7" class="text-right font-extrabold text-navy-900 text-sm uppercase tracking-wide !py-4">Total pendapatan (status selesai)</td>
                         <td class="text-right font-extrabold text-navy-900 text-lg whitespace-nowrap !py-4"><?= rupiah($lHari_totalPendapatan) ?></td>
                     </tr>
                 <?php endif; ?>
@@ -688,7 +815,11 @@ $pdfRataHari = ($tab === 'harian' && $lHari_totalBooking > 0)
                         <div class="admin-modal-ico"><i class="fa-solid fa-receipt"></i></div>
                         <div class="min-w-0">
                             <h3>Detail Setoran · 1 PP</h3>
-                            <p x-text="(hari || '') + (tanggalId ? ', ' + tanggalId : '')"></p>
+                            <p>
+                                <span x-text="(hari || '') + (tanggalId ? ', ' + tanggalId : '')"></span>
+                                <template x-if="pp_label"><span x-text="' · ' + pp_label"></span></template>
+                            </p>
+                            <p class="text-[11px] text-blue-100/80 font-medium mt-0.5" x-show="pp_ringkas" x-text="pp_ringkas"></p>
                         </div>
                     </div>
                     <button type="button" @click="close()" class="admin-modal-close" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
@@ -702,74 +833,96 @@ $pdfRataHari = ($tab === 'harian' && $lHari_totalBooking > 0)
 
                     <div x-show="!loading && error" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-semibold" x-text="error"></div>
 
-                    <template x-if="!loading && !error">
+                    <template x-if="!loading && !error && step === 'pilih'">
+                        <div class="space-y-3">
+                            <p class="text-sm text-slate-600 font-medium">Pilih <b>1 PP</b>, lalu <b>centang manual</b> booking berangkat &amp; pulang — tidak otomatis.</p>
+                            <template x-for="p in ppList" :key="p.pp_kode">
+                                <button type="button" class="lap-pp-pick" @click="openPp(tanggal, p.pp_kode)">
+                                    <div class="min-w-0 text-left">
+                                        <div class="font-extrabold text-navy-900" x-text="p.label"></div>
+                                        <div class="text-[12px] text-slate-600 font-semibold mt-0.5" x-text="p.ringkas"></div>
+                                        <div class="text-[11px] text-slate-500 mt-1"
+                                             x-text="p.tersimpan
+                                                ? ('Tersimpan · Brg ' + p.berangkat + ' · Plg ' + p.pulang + (p.driver ? ' · ' + p.driver : ''))
+                                                : 'Belum diisi — ketuk untuk pilih booking'"></div>
+                                    </div>
+                                    <div class="text-right shrink-0">
+                                        <div class="text-sm font-black text-navy-900" x-text="p.tersimpan ? rupiah(p.omzet) : '—'"></div>
+                                        <div class="text-[10px] font-bold text-gold-700 mt-0.5">Pilih →</div>
+                                    </div>
+                                </button>
+                            </template>
+                        </div>
+                    </template>
+
+                    <template x-if="!loading && !error && step === 'detail'">
                         <div class="space-y-4">
+                            <button type="button" class="text-xs font-bold text-navy-700 underline" @click="backToPpList()">← Ganti PP</button>
                             <div>
-                                <label class="form-label">Driver</label>
+                                <label class="form-label">Driver (khusus PP ini)</label>
                                 <input type="text" class="input-field" x-model="driver_name" placeholder="Nama driver (mis. Arif)" maxlength="120">
                             </div>
 
-                            <!-- BERANGKAT -->
+                            <div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-[12px] text-amber-900 font-semibold leading-snug">
+                                Centang booking lalu pilih <b>Berangkat</b> atau <b>Pulang</b>. Yang tidak dicentang tidak dihitung.
+                            </div>
+
+                            <!-- PILIH MANUAL -->
                             <div>
-                                <div class="admin-modal-section !pt-0">Berangkat <span class="font-normal normal-case tracking-normal text-slate-400" x-text="'· ' + berangkat.length + ' booking'"></span></div>
-                                <div class="lap-pax-list" x-show="berangkat.length === 0">
-                                    <div class="lap-pax-empty">Tidak ada booking berangkat.</div>
+                                <div class="admin-modal-section !pt-0">
+                                    Pilih booking
+                                    <span class="font-normal normal-case tracking-normal text-slate-400"
+                                          x-text="'· ' + available.length + ' tersedia · ' + selectedCount + ' dipilih'"></span>
                                 </div>
-                                <div class="lap-pax-list" x-show="berangkat.length > 0">
-                                    <template x-for="b in berangkat" :key="'b'+b.booking_id">
-                                        <div class="lap-pax-card">
-                                            <div class="lap-pax-top">
-                                                <div class="min-w-0">
-                                                    <div class="lap-pax-name" x-text="b.nama"></div>
-                                                    <div class="lap-pax-meta" x-text="'#MT-' + b.booking_id + ' · ' + b.jam"></div>
-                                                </div>
+                                <div class="lap-pax-list" x-show="available.length === 0">
+                                    <div class="lap-pax-empty">Tidak ada booking confirmed/selesai di tanggal ini.</div>
+                                </div>
+                                <div class="lap-pick-list" x-show="available.length > 0">
+                                    <template x-for="b in available" :key="'a'+b.booking_id">
+                                        <div class="lap-pick-card" :class="{ 'is-on': b.selected, 'is-used': b.used_elsewhere && !b.selected }">
+                                            <label class="lap-pick-check">
+                                                <input type="checkbox"
+                                                       :checked="b.selected"
+                                                       :disabled="b.used_elsewhere && !b.selected"
+                                                       @change="toggleSelect(b, $event.target.checked)">
+                                            </label>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="lap-pax-name" x-text="b.nama"></div>
+                                                <div class="lap-pax-meta"
+                                                     x-text="'#MT-' + b.booking_id + ' · ' + (b.tanggal_id || b.tanggal) + ' · ' + b.jam + (b.rute ? ' · ' + b.rute : '')"></div>
+                                                <div class="lap-pax-ticket" x-text="fmtTicket(b) + ' · ' + b.jumlah_kursi + ' Penumpang'"></div>
+                                                <div class="text-[10px] font-bold text-rose-600 mt-1" x-show="b.used_elsewhere && !b.selected"
+                                                     x-text="'Sudah di ' + (b.used_label || 'PP lain')"></div>
+                                            </div>
+                                            <div class="lap-pick-side" x-show="b.selected">
                                                 <select class="input-field lap-pax-arah"
-                                                        :value="b.arah"
+                                                        :value="b.arah || 'berangkat'"
                                                         @change="setArah(b, $event.target.value)">
                                                     <option value="berangkat">Berangkat</option>
                                                     <option value="pulang">Pulang</option>
                                                 </select>
-                                            </div>
-                                            <div class="lap-pax-ticket" x-text="fmtTicket(b) + ' · ' + b.jumlah_kursi + ' Penumpang'"></div>
-                                            <div class="lap-pax-fee">
-                                                <label>Fee Agen</label>
-                                                <input type="number" min="0" step="1000" inputmode="numeric"
-                                                       x-model.number="b.fee_agen" @input="recalc()">
+                                                <div class="lap-pax-fee !mt-1.5">
+                                                    <label>Fee</label>
+                                                    <input type="number" min="0" step="1000" inputmode="numeric"
+                                                           x-model.number="b.fee_agen" @input="recalc()">
+                                                </div>
                                             </div>
                                         </div>
                                     </template>
                                 </div>
                             </div>
 
-                            <!-- PULANG -->
-                            <div>
-                                <div class="admin-modal-section">Pulang <span class="font-normal normal-case tracking-normal text-slate-400" x-text="'· ' + pulang.length + ' booking'"></span></div>
-                                <div class="lap-pax-list" x-show="pulang.length === 0">
-                                    <div class="lap-pax-empty">Tidak ada booking pulang.</div>
+                            <!-- RINGKAS TERPILIH -->
+                            <div class="grid grid-cols-2 gap-2">
+                                <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                    <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Berangkat</div>
+                                    <div class="text-sm font-black text-navy-900" x-text="berangkat.length + ' booking'"></div>
+                                    <div class="text-xs font-bold text-slate-600" x-text="rupiah(totalBerangkat)"></div>
                                 </div>
-                                <div class="lap-pax-list" x-show="pulang.length > 0">
-                                    <template x-for="b in pulang" :key="'p'+b.booking_id">
-                                        <div class="lap-pax-card">
-                                            <div class="lap-pax-top">
-                                                <div class="min-w-0">
-                                                    <div class="lap-pax-name" x-text="b.nama"></div>
-                                                    <div class="lap-pax-meta" x-text="'#MT-' + b.booking_id + ' · ' + b.jam"></div>
-                                                </div>
-                                                <select class="input-field lap-pax-arah"
-                                                        :value="b.arah"
-                                                        @change="setArah(b, $event.target.value)">
-                                                    <option value="berangkat">Berangkat</option>
-                                                    <option value="pulang">Pulang</option>
-                                                </select>
-                                            </div>
-                                            <div class="lap-pax-ticket" x-text="fmtTicket(b) + ' · ' + b.jumlah_kursi + ' Penumpang'"></div>
-                                            <div class="lap-pax-fee">
-                                                <label>Fee Agen</label>
-                                                <input type="number" min="0" step="1000" inputmode="numeric"
-                                                       x-model.number="b.fee_agen" @input="recalc()">
-                                            </div>
-                                        </div>
-                                    </template>
+                                <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                    <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Pulang</div>
+                                    <div class="text-sm font-black text-navy-900" x-text="pulang.length + ' booking'"></div>
+                                    <div class="text-xs font-bold text-slate-600" x-text="rupiah(totalPulang)"></div>
                                 </div>
                             </div>
 
@@ -860,7 +1013,8 @@ $pdfRataHari = ($tab === 'harian' && $lHari_totalBooking > 0)
 
                 <div class="admin-modal-foot lap-settle-foot">
                     <button type="button" @click="close()" class="btn-secondary">Tutup</button>
-                    <button type="button" class="btn-primary" :disabled="loading || saving || !!error" @click="save()">
+                    <button type="button" class="btn-primary" x-show="step === 'detail'"
+                            :disabled="loading || saving || !!error || !pp_kode" @click="save()">
                         <i class="fa-solid" :class="saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'"></i>
                         <span x-text="saving ? 'Menyimpan…' : 'Simpan setoran'"></span>
                     </button>
@@ -884,9 +1038,14 @@ function modalSetoranData() {
         saveMsg: '',
         saveOk: false,
         copied: false,
+        step: 'pilih', // pilih | detail
         tanggal: '',
         tanggalId: '',
         hari: '',
+        pp_kode: '',
+        pp_label: '',
+        pp_ringkas: '',
+        ppList: [],
         csrf: CSRF,
         driver_name: '',
         bbm: 0,
@@ -894,7 +1053,7 @@ function modalSetoranData() {
         fee_ops: 0,
         ops_lain: 0,
         notes: '',
-        bookings: [],
+        available: [],
         totalBerangkat: 0,
         totalPulang: 0,
         totalPendapatan: 0,
@@ -905,10 +1064,16 @@ function modalSetoranData() {
         sisaSetoran: 0,
 
         get berangkat() {
-            return this.bookings.filter(b => b.arah === 'berangkat');
+            return this.available.filter(b => b.selected && b.arah === 'berangkat');
         },
         get pulang() {
-            return this.bookings.filter(b => b.arah === 'pulang');
+            return this.available.filter(b => b.selected && b.arah === 'pulang');
+        },
+        get selectedCount() {
+            return this.available.filter(b => b.selected).length;
+        },
+        get bookings() {
+            return this.available.filter(b => b.selected);
         },
 
         rupiah(n) {
@@ -921,14 +1086,27 @@ function modalSetoranData() {
             const k = parseInt(b.jumlah_kursi || 1, 10);
             return h.toLocaleString('id-ID') + ' × ' + k + 'Pnp';
         },
+        toggleSelect(b, on) {
+            if (on && b.used_elsewhere) return;
+            b.selected = !!on;
+            if (b.selected) {
+                if (b.arah !== 'berangkat' && b.arah !== 'pulang') b.arah = 'berangkat';
+            } else {
+                b.arah = null;
+            }
+            this.available = this.available.slice();
+            this.recalc();
+        },
         setArah(b, arah) {
+            if (!b.selected) return;
             b.arah = arah === 'pulang' ? 'pulang' : 'berangkat';
-            this.bookings = this.bookings.slice();
+            this.available = this.available.slice();
             this.recalc();
         },
         recalc() {
             let tb = 0, tp = 0, fee = 0;
-            this.bookings.forEach(b => {
+            this.available.forEach(b => {
+                if (!b.selected) return;
                 const tot = parseInt(b.total_harga || 0, 10);
                 fee += Math.max(0, parseInt(b.fee_agen || 0, 10));
                 if (b.arah === 'pulang') tp += tot;
@@ -948,7 +1126,7 @@ function modalSetoranData() {
             this.sisaSetoran = this.net - this.hasilDriver;
         },
         linesFor(arah) {
-            return this.bookings.filter(b => b.arah === arah).map(b => {
+            return this.available.filter(b => b.selected && b.arah === arah).map(b => {
                 const fee = Math.max(0, parseInt(b.fee_agen || 0, 10));
                 return '- ' + b.nama + ' · ' + this.fmtTicket(b)
                     + ' · ' + b.jumlah_kursi + ' Pnp'
@@ -968,6 +1146,7 @@ function modalSetoranData() {
 
             let txt = '';
             txt += '*SETORAN 1 PP — ' + SITE + '*\n';
+            txt += 'PP: ' + (this.pp_label || '-') + (this.pp_ringkas ? ' (' + this.pp_ringkas + ')' : '') + '\n';
             txt += 'Driver: ' + driver + '\n';
             txt += 'Tanggal: ' + tgl + '\n\n';
             txt += '*BERANGKAT* (' + br.length + ')\n';
@@ -986,7 +1165,7 @@ function modalSetoranData() {
             return txt.trim() + '\n';
         },
         canShare() {
-            return !this.loading && !this.error && !!this.tanggal;
+            return !this.loading && !this.error && !!this.tanggal && this.step === 'detail' && !!this.pp_kode;
         },
         waShareUrl() {
             if (!this.canShare()) return '#';
@@ -1026,8 +1205,9 @@ function modalSetoranData() {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             const safeTgl = (this.tanggal || 'setoran').replace(/[^\d-]/g, '');
+            const safePp = (this.pp_kode || 'pp').replace(/[^\w-]/g, '');
             a.href = url;
-            a.download = 'Setoran_' + safeTgl + '_Mustika_Travel.txt';
+            a.download = 'Setoran_' + safeTgl + '_' + safePp + '_Mustika_Travel.txt';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -1039,6 +1219,9 @@ function modalSetoranData() {
             this.hari = data.hari || '';
             this.tanggalId = data.tanggal_id || data.tanggal || this.tanggal;
             this.tanggal = data.tanggal || this.tanggal;
+            this.pp_kode = data.pp_kode || this.pp_kode || '';
+            this.pp_label = data.pp_label || '';
+            this.pp_ringkas = data.pp_ringkas || '';
             const s = data.settlement || {};
             this.driver_name = s.driver_name || '';
             this.bbm = parseInt(s.bbm || 0, 10);
@@ -1046,19 +1229,36 @@ function modalSetoranData() {
             this.fee_ops = parseInt(s.fee_ops || 0, 10);
             this.ops_lain = parseInt(s.ops_lain || 0, 10);
             this.notes = s.notes || '';
-            this.bookings = (data.bookings || []).map(b => ({
-                ...b,
-                fee_agen: parseInt(b.fee_agen || 0, 10),
-                arah: b.arah === 'pulang' ? 'pulang' : 'berangkat'
-            }));
+            this.available = (data.available || []).map(b => {
+                const selected = !!b.selected;
+                let arah = null;
+                if (selected) arah = b.arah === 'pulang' ? 'pulang' : 'berangkat';
+                return {
+                    ...b,
+                    fee_agen: parseInt(b.fee_agen || 0, 10),
+                    selected,
+                    arah,
+                    used_elsewhere: !!b.used_elsewhere,
+                    used_label: b.used_label || ''
+                };
+            });
             if (data.csrf) this.csrf = data.csrf;
             this.recalc();
         },
-        async fetchTanggal(tanggal) {
-            const res = await fetch(API + '?tanggal=' + encodeURIComponent(tanggal), {
+        async fetchPpList(tanggal) {
+            const res = await fetch(API + '?list=1&tanggal=' + encodeURIComponent(tanggal), {
                 credentials: 'same-origin',
                 headers: { 'Accept': 'application/json' }
             });
+            const data = await res.json();
+            if (!data.ok) throw new Error(data.error || 'Gagal memuat daftar PP');
+            return data;
+        },
+        async fetchPp(tanggal, ppKode) {
+            const res = await fetch(
+                API + '?tanggal=' + encodeURIComponent(tanggal) + '&pp=' + encodeURIComponent(ppKode),
+                { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }
+            );
             const data = await res.json();
             if (!data.ok) throw new Error(data.error || 'Gagal memuat');
             return data;
@@ -1070,11 +1270,38 @@ function modalSetoranData() {
             this.error = '';
             this.saveMsg = '';
             this.copied = false;
+            this.step = 'pilih';
             this.tanggal = tanggal;
-            this.bookings = [];
+            this.pp_kode = '';
+            this.pp_label = '';
+            this.pp_ringkas = '';
+            this.ppList = [];
+            this.available = [];
             document.body.style.overflow = 'hidden';
             try {
-                const data = await this.fetchTanggal(tanggal);
+                const data = await this.fetchPpList(tanggal);
+                this.hari = data.hari || '';
+                this.tanggalId = data.tanggal_id || tanggal;
+                this.ppList = data.pp_list || [];
+                if (data.csrf) this.csrf = data.csrf;
+            } catch (e) {
+                this.error = e.message || 'Gagal memuat data.';
+            } finally {
+                this.loading = false;
+            }
+        },
+        async openPp(tanggal, ppKode) {
+            if (!tanggal || !ppKode) return;
+            this.show = true;
+            this.loading = true;
+            this.error = '';
+            this.saveMsg = '';
+            this.step = 'detail';
+            this.tanggal = tanggal;
+            this.pp_kode = ppKode;
+            document.body.style.overflow = 'hidden';
+            try {
+                const data = await this.fetchPp(tanggal, ppKode);
                 this.applyPayload(data);
             } catch (e) {
                 this.error = e.message || 'Gagal memuat data.';
@@ -1082,64 +1309,35 @@ function modalSetoranData() {
                 this.loading = false;
             }
         },
+        async backToPpList() {
+            await this.open(this.tanggal);
+        },
         async copyTanggal(tanggal) {
-            try {
-                const data = await this.fetchTanggal(tanggal);
-                // temporary apply without opening modal
-                const prev = {
-                    show: this.show,
-                    tanggal: this.tanggal,
-                    tanggalId: this.tanggalId,
-                    hari: this.hari,
-                    driver_name: this.driver_name,
-                    bbm: this.bbm,
-                    toll: this.toll,
-                    fee_ops: this.fee_ops,
-                    ops_lain: this.ops_lain,
-                    notes: this.notes,
-                    bookings: this.bookings,
-                    csrf: this.csrf
-                };
-                this.applyPayload(data);
-                await this.copyToClipboard(this.buildShareText());
-                if (!prev.show) {
-                    this.tanggal = prev.tanggal;
-                    this.tanggalId = prev.tanggalId;
-                    this.hari = prev.hari;
-                    this.driver_name = prev.driver_name;
-                    this.bbm = prev.bbm;
-                    this.toll = prev.toll;
-                    this.fee_ops = prev.fee_ops;
-                    this.ops_lain = prev.ops_lain;
-                    this.notes = prev.notes;
-                    this.bookings = prev.bookings;
-                    this.csrf = prev.csrf;
-                    this.recalc();
-                }
-                alert('Ringkasan setoran ' + (data.tanggal_id || tanggal) + ' tersalin. Tempel di WhatsApp.');
-            } catch (e) {
-                alert(e.message || 'Gagal menyalin ringkasan.');
-            }
+            await this.open(tanggal);
+            this.saveMsg = 'Pilih 1 PP, centang booking, baru salin ringkasannya.';
+            this.saveOk = true;
         },
         close() {
             this.show = false;
+            this.step = 'pilih';
             document.body.style.overflow = '';
         },
         async save() {
-            if (this.saving || this.loading) return;
+            if (this.saving || this.loading || this.step !== 'detail' || !this.pp_kode) return;
             this.saving = true;
             this.saveMsg = '';
             try {
                 const payload = {
                     csrf_token: this.csrf,
                     tanggal: this.tanggal,
+                    pp_kode: this.pp_kode,
                     driver_name: this.driver_name,
                     bbm: parseInt(this.bbm || 0, 10),
                     toll: parseInt(this.toll || 0, 10),
                     fee_ops: parseInt(this.fee_ops || 0, 10),
                     ops_lain: parseInt(this.ops_lain || 0, 10),
                     notes: this.notes,
-                    fees: this.bookings.map(b => ({
+                    fees: this.available.filter(b => b.selected).map(b => ({
                         booking_id: b.booking_id,
                         fee_agen: parseInt(b.fee_agen || 0, 10),
                         arah: b.arah === 'pulang' ? 'pulang' : 'berangkat'
@@ -1167,6 +1365,27 @@ function modalSetoranData() {
 }
 
 document.addEventListener('click', function (e) {
+    const tripCopy = e.target.closest('.js-trip-copy');
+    if (tripCopy) {
+        e.preventDefault();
+        e.stopPropagation();
+        const pesan = tripCopy.getAttribute('data-pesan') || '';
+        const done = function () {
+            const old = tripCopy.innerHTML;
+            tripCopy.innerHTML = '<i class="fa-solid fa-check"></i> Tersalin';
+            setTimeout(function () { tripCopy.innerHTML = old; }, 1600);
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(pesan).then(done).catch(function () {
+                prompt('Salin teks ini:', pesan);
+            });
+        } else {
+            prompt('Salin teks ini:', pesan);
+            done();
+        }
+        return;
+    }
+
     const copyBtn = e.target.closest('.js-lap-copy');
     if (copyBtn) {
         e.preventDefault();

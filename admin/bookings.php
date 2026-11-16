@@ -10,31 +10,38 @@ require_once __DIR__ . '/includes/admin_header.php';
 
 $flash = get_flash();
 
-// === 1. FILTER ===
-$f_status    = $_GET['status']    ?? ''; // pending, confirmed, completed, cancelled, ''=semua
-$f_tgl_dari  = $_GET['tgl_dari']  ?? '';
-$f_tgl_sampai= $_GET['tgl_sampai']?? '';
-$f_search    = trim($_GET['q']    ?? '');
+// === 1. FILTER (khusus 1 hari) ===
+$f_status  = $_GET['status'] ?? ''; // pending, confirmed, completed, cancelled, ''=semua
+$f_search  = trim($_GET['q'] ?? '');
+$hariIni   = date('Y-m-d');
+$f_tanggal = trim($_GET['tanggal'] ?? $hariIni);
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_tanggal)) {
+    $f_tanggal = $hariIni;
+}
+$tglKemarin = date('Y-m-d', strtotime($f_tanggal . ' -1 day'));
+$tglBesok   = date('Y-m-d', strtotime($f_tanggal . ' +1 day'));
 
-$where  = [];
-$params = [];
-if (!empty($f_status) && in_array($f_status, ['pending','confirmed','completed','cancelled'])) {
+$bkQs = static function (array $extra = []) use ($f_tanggal, $f_status, $f_search): string {
+    $q = array_merge([
+        'tanggal' => $f_tanggal,
+        'status'  => $f_status,
+        'q'       => $f_search,
+    ], $extra);
+    $q = array_filter($q, static fn($v) => $v !== null && $v !== '');
+    return $q ? ('?' . http_build_query($q)) : '';
+};
+
+$where  = ["tanggal_berangkat = ?"];
+$params = [$f_tanggal];
+if (!empty($f_status) && in_array($f_status, ['pending','confirmed','completed','cancelled'], true)) {
     $where[]  = "status = ?";
     $params[] = $f_status;
 }
-if (!empty($f_tgl_dari)) {
-    $where[]  = "tanggal_berangkat >= ?";
-    $params[] = $f_tgl_dari;
-}
-if (!empty($f_tgl_sampai)) {
-    $where[]  = "tanggal_berangkat <= ?";
-    $params[] = $f_tgl_sampai;
-}
 if (!empty($f_search)) {
-    $like    = "%{$f_search}%";
+    $like = "%{$f_search}%";
     // Untuk pencarian kode booking MT-4: strip non digit, biar ketemu by ID
     $searchAngka = preg_replace('/[^0-9]/', '', $f_search);
-    if(empty($searchAngka)) $searchAngka = null;
+    if ($searchAngka === '') $searchAngka = null;
 
     $where[] = "(
         CAST(id AS CHAR) LIKE ?
@@ -49,10 +56,10 @@ if (!empty($f_search)) {
     )";
 
     $arr = [$like,$like,$like, $like, $like, $like,$like, $like,$like, $like,$like, $like,$like];
-    if($searchAngka) $arr[] = (int)$searchAngka;
+    if ($searchAngka) $arr[] = (int)$searchAngka;
     $params = array_merge($params, $arr);
 }
-$sqlWhere = count($where) ? " WHERE " . implode(" AND ", $where) : "";
+$sqlWhere = " WHERE " . implode(" AND ", $where);
 
 // Total untuk pagination (ambil 500 terbaru, cukup untuk kebutuhan)
 $sqlCount = "SELECT COUNT(*) FROM bookings {$sqlWhere}";
@@ -60,8 +67,8 @@ $stmt = $pdo->prepare($sqlCount);
 $stmt->execute($params);
 $totalData = (int)$stmt->fetchColumn();
 
-// Data
-$sqlData = "SELECT * FROM bookings {$sqlWhere} ORDER BY created_at DESC, id DESC LIMIT 500";
+// Data — urut jam jemput biar rapi per hari
+$sqlData = "SELECT * FROM bookings {$sqlWhere} ORDER BY jam_jemput ASC, id ASC LIMIT 500";
 $stmt = $pdo->prepare($sqlData);
 $stmt->execute($params);
 $bookings = $stmt->fetchAll();
@@ -103,30 +110,61 @@ $lokOpsis = [
             <div class="min-w-0">
                 <div class="dash-hero-kicker">Operasional · Booking</div>
                 <h1 class="dash-hero-title">Data <em>Booking</em></h1>
-                <p class="dash-hero-desc"><?= (int)$totalData ?> pemesanan ditampilkan · online &amp; manual.</p>
+                <p class="dash-hero-desc">
+                    <?= (int)$totalData ?> booking · <?= e(tgl_id($f_tanggal)) ?>
+                    <?= $f_tanggal === $hariIni ? ' (hari ini)' : '' ?>
+                </p>
             </div>
             <div class="dash-hero-actions">
                 <button type="button" onclick="window.modalWaImport.open()" class="is-ghost"><i class="fa-brands fa-whatsapp"></i> Impor dari WA</button>
+                <button type="button" class="is-ghost" id="btn-copy-driver-link"
+                        data-link="<?= e(driver_public_url()) ?>"
+                        title="Salin link form driver (tanpa login)">
+                    <i class="fa-solid fa-motorcycle"></i> Link driver
+                </button>
                 <button type="button" onclick="window.modalTambah.open()" class="is-gold"><i class="fa-solid fa-plus"></i> Tambah booking</button>
             </div>
         </div>
     </section>
 
+    <div class="bk-day-nav">
+        <a href="<?= BASE_URL ?>/admin/bookings.php<?= e($bkQs(['tanggal' => $tglKemarin])) ?>" class="bk-day-btn" title="Hari sebelumnya">
+            <i class="fa-solid fa-chevron-left"></i>
+        </a>
+        <div class="bk-day-label">
+            <span class="bk-day-date"><?= e(tgl_id($f_tanggal)) ?></span>
+            <?php if ($f_tanggal === $hariIni): ?>
+                <span class="bk-day-badge">Hari ini</span>
+            <?php endif; ?>
+        </div>
+        <a href="<?= BASE_URL ?>/admin/bookings.php<?= e($bkQs(['tanggal' => $tglBesok])) ?>" class="bk-day-btn" title="Hari berikutnya">
+            <i class="fa-solid fa-chevron-right"></i>
+        </a>
+        <?php if ($f_tanggal !== $hariIni): ?>
+            <a href="<?= BASE_URL ?>/admin/bookings.php<?= e($bkQs(['tanggal' => $hariIni])) ?>" class="bk-day-today">Hari ini</a>
+        <?php endif; ?>
+    </div>
+
     <div class="bk-pills">
-        <a href="<?= BASE_URL ?>/admin/bookings.php" class="bk-pill <?= $f_status === '' ? 'is-on' : '' ?>">Semua</a>
+        <a href="<?= BASE_URL ?>/admin/bookings.php<?= e($bkQs(['status' => ''])) ?>" class="bk-pill <?= $f_status === '' ? 'is-on' : '' ?>">Semua</a>
         <?php
         $pillPendek = ['pending'=>'Pending','confirmed'=>'Konfirmasi','completed'=>'Selesai','cancelled'=>'Batal'];
         foreach ($opsiStatus as $v => $l):
         ?>
-            <a href="<?= BASE_URL ?>/admin/bookings.php?status=<?= $v ?>" class="bk-pill <?= $f_status === $v ? 'is-on' : '' ?>"><?= $pillPendek[$v] ?? $l ?></a>
+            <a href="<?= BASE_URL ?>/admin/bookings.php<?= e($bkQs(['status' => $v])) ?>" class="bk-pill <?= $f_status === $v ? 'is-on' : '' ?>"><?= $pillPendek[$v] ?? $l ?></a>
         <?php endforeach; ?>
     </div>
 
     <div class="filter-bar">
         <form method="GET" class="filter-form">
             <div class="filter-field">
+                <label class="form-label">Tanggal berangkat</label>
+                <input type="date" name="tanggal" value="<?= e($f_tanggal) ?>" class="input-field" required
+                       onchange="this.form.submit()">
+            </div>
+            <div class="filter-field">
                 <label class="form-label">Status</label>
-                <select name="status" class="input-field">
+                <select name="status" class="input-field" onchange="this.form.submit()">
                     <option value="">Semua status</option>
                     <?php foreach ($opsiStatus as $v => $l) {
                         $sel = ($f_status === $v) ? 'selected' : '';
@@ -134,21 +172,13 @@ $lokOpsis = [
                     } ?>
                 </select>
             </div>
-            <div class="filter-field">
-                <label class="form-label">Dari</label>
-                <input type="date" name="tgl_dari" value="<?= e($f_tgl_dari) ?>" class="input-field">
-            </div>
-            <div class="filter-field">
-                <label class="form-label">Sampai</label>
-                <input type="date" name="tgl_sampai" value="<?= e($f_tgl_sampai) ?>" class="input-field">
-            </div>
             <div class="filter-field is-grow">
-                <label class="form-label">Cari</label>
+                <label class="form-label">Cari di tanggal ini</label>
                 <input type="text" name="q" value="<?= e($f_search) ?>" placeholder="Kode, nama, HP, rute..." class="input-field">
             </div>
             <div class="filter-actions">
-                <button type="submit" class="btn-primary"><i class="fa-solid fa-magnifying-glass"></i> Filter</button>
-                <a href="<?= BASE_URL ?>/admin/bookings.php" class="btn-secondary">Reset</a>
+                <button type="submit" class="btn-primary"><i class="fa-solid fa-magnifying-glass"></i> Cari</button>
+                <a href="<?= BASE_URL ?>/admin/bookings.php?tanggal=<?= e($hariIni) ?>" class="btn-secondary">Reset</a>
             </div>
         </form>
     </div>
@@ -159,8 +189,8 @@ $lokOpsis = [
         <?php if (empty($bookings)): ?>
             <div class="empty-state">
                 <div class="empty-state-icon"><i class="fa-solid fa-inbox"></i></div>
-                <div class="font-semibold text-slate-600">Tidak ada data booking.</div>
-                <div class="text-sm mt-1">Coba ubah filter atau <button type="button" onclick="window.modalTambah.open()" class="text-navy-800 underline font-bold">tambah manual</button>.</div>
+                <div class="font-semibold text-slate-600">Tidak ada booking di <?= e(tgl_id($f_tanggal)) ?>.</div>
+                <div class="text-sm mt-1">Ganti tanggal di atas, atau <button type="button" onclick="window.modalTambah.open()" class="text-navy-800 underline font-bold">tambah manual</button>.</div>
             </div>
         <?php else: ?>
             <?php foreach ($bookings as $b):
@@ -222,8 +252,8 @@ $lokOpsis = [
                         <td colspan="12">
                             <div class="empty-state">
                                 <div class="empty-state-icon"><i class="fa-solid fa-inbox"></i></div>
-                                <div class="font-semibold text-slate-600">Tidak ada data booking.</div>
-                                <div class="text-sm mt-1">Coba ubah filter atau <button type="button" onclick="window.modalTambah.open()" class="text-navy-800 underline font-bold">tambah manual</button>.</div>
+                                <div class="font-semibold text-slate-600">Tidak ada booking di <?= e(tgl_id($f_tanggal)) ?>.</div>
+                                <div class="text-sm mt-1">Ganti tanggal di atas, atau <button type="button" onclick="window.modalTambah.open()" class="text-navy-800 underline font-bold">tambah manual</button>.</div>
                             </div>
                         </td>
                     </tr>
@@ -1220,5 +1250,27 @@ function modalEditData(){
         }
     }
 }
+</script>
+<script>
+document.getElementById('btn-copy-driver-link')?.addEventListener('click', async function () {
+    const link = this.getAttribute('data-link') || '';
+    if (!link) return;
+    const done = () => {
+        const old = this.innerHTML;
+        this.innerHTML = '<i class="fa-solid fa-check"></i> Link tersalin';
+        setTimeout(() => { this.innerHTML = old; }, 1800);
+    };
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(link);
+            done();
+        } else {
+            prompt('Salin link driver ini (kirim ke WA driver):', link);
+            done();
+        }
+    } catch (e) {
+        prompt('Salin link driver ini:', link);
+    }
+});
 </script>
 <?php require_once __DIR__ . '/includes/admin_footer.php'; ?>

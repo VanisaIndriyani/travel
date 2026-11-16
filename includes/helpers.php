@@ -650,6 +650,51 @@ function ensure_bookings_maps_link_column(): bool
 }
 
 /**
+ * Pastikan ENUM source bookings menerima nilai 'driver' (input dari link driver).
+ */
+function ensure_bookings_source_driver(): bool
+{
+    global $pdo;
+    if (empty($pdo)) return false;
+    static $ok = null;
+    if ($ok === true) return true;
+    try {
+        $col = $pdo->query("SHOW COLUMNS FROM `bookings` LIKE 'source'")->fetch(PDO::FETCH_ASSOC);
+        if (!$col) {
+            $ok = false;
+            return false;
+        }
+        $type = (string)($col['Type'] ?? '');
+        if (stripos($type, "'driver'") === false) {
+            $pdo->exec("ALTER TABLE `bookings`
+                MODIFY COLUMN `source` ENUM('online','manual','driver')
+                NOT NULL DEFAULT 'online'");
+        }
+        $ok = true;
+        return true;
+    } catch (Throwable $e) {
+        $ok = false;
+        return false;
+    }
+}
+
+/** URL publik form driver (tanpa login). */
+function driver_public_url(): string
+{
+    $tok = defined('DRIVER_ACCESS_TOKEN') ? DRIVER_ACCESS_TOKEN : '';
+    return rtrim(BASE_URL, '/') . '/driver.php?k=' . rawurlencode($tok);
+}
+
+/** Cek token link driver (timing-safe). */
+function driver_token_ok(?string $token): bool
+{
+    $expected = defined('DRIVER_ACCESS_TOKEN') ? (string)DRIVER_ACCESS_TOKEN : '';
+    $token = trim((string)$token);
+    if ($expected === '' || $token === '') return false;
+    return hash_equals($expected, $token);
+}
+
+/**
  * Validasi & bersihkan URL Google Maps dari input penumpang/admin.
  * Kosong = OK (opsional). URL non-Maps ditolak → string kosong.
  */
@@ -700,7 +745,87 @@ function infer_arah_booking(array $b): string
 }
 
 /**
- * Pastikan tabel setoran harian ada (auto-create jika belum).
+ * Definisi 1 PP = satu pasangan berangkat + pulang (jangan dicampur antar PP).
+ *
+ * - PP Pagi  : 08.00 berangkat + 15.00/18.00 pulang (hari yang sama)
+ * - PP Siang : 11.00 berangkat + 20.00 pulang (hari yang sama)
+ * - PP Malam : 20.00 berangkat + 10.00 pulang (besok pagi)
+ */
+function mustika_pp_definitions(): array
+{
+    return [
+        'pp_08_15' => [
+            'kode'            => 'pp_08_15',
+            'label'           => 'PP Pagi',
+            'ringkas'         => '08.00 berangkat → 15.00 / 18.00 pulang',
+            'berangkat_jam'   => [8],
+            'pulang_jam'      => [15, 18],
+            'pulang_next_day' => false,
+        ],
+        'pp_11_20' => [
+            'kode'            => 'pp_11_20',
+            'label'           => 'PP Siang',
+            'ringkas'         => '11.00 berangkat → 20.00 pulang',
+            'berangkat_jam'   => [11],
+            'pulang_jam'      => [20],
+            'pulang_next_day' => false,
+        ],
+        'pp_20_10' => [
+            'kode'            => 'pp_20_10',
+            'label'           => 'PP Malam',
+            'ringkas'         => '20.00 berangkat → 10.00 pulang (besok)',
+            'berangkat_jam'   => [20],
+            'pulang_jam'      => [10],
+            'pulang_next_day' => true,
+        ],
+    ];
+}
+
+function mustika_pp_get(string $kode): ?array
+{
+    $all = mustika_pp_definitions();
+    return $all[$kode] ?? null;
+}
+
+/** Ambil jam (0–23) dari jam_jemput HH:MM(:SS). */
+function mustika_jam_hour(?string $jam): int
+{
+    $jam = trim((string)$jam);
+    if ($jam === '') return -1;
+    if (preg_match('/^(\d{1,2})/', $jam, $m)) {
+        $h = (int)$m[1];
+        return ($h >= 0 && $h <= 23) ? $h : -1;
+    }
+    return -1;
+}
+
+/**
+ * Tentukan PP + arah dari booking relatif ke tanggal anchor PP.
+ * @return array{pp:?string,arah:?string}
+ */
+function mustika_pp_match_booking(array $b, string $tanggalAnchor, array $pp): array
+{
+    $tgl = (string)($b['tanggal_berangkat'] ?? '');
+    $hour = mustika_jam_hour($b['jam_jemput'] ?? '');
+    if ($hour < 0 || $tgl === '') {
+        return ['pp' => null, 'arah' => null];
+    }
+
+    $pulangTgl = !empty($pp['pulang_next_day'])
+        ? date('Y-m-d', strtotime($tanggalAnchor . ' +1 day'))
+        : $tanggalAnchor;
+
+    if ($tgl === $tanggalAnchor && in_array($hour, $pp['berangkat_jam'], true)) {
+        return ['pp' => $pp['kode'], 'arah' => 'berangkat'];
+    }
+    if ($tgl === $pulangTgl && in_array($hour, $pp['pulang_jam'], true)) {
+        return ['pp' => $pp['kode'], 'arah' => 'pulang'];
+    }
+    return ['pp' => null, 'arah' => null];
+}
+
+/**
+ * Pastikan tabel setoran harian ada + kolom pp_kode (1 PP terpisah).
  */
 function ensure_laporan_settlement_tables(): bool
 {
@@ -714,6 +839,7 @@ function ensure_laporan_settlement_tables(): bool
             $pdo->exec("CREATE TABLE IF NOT EXISTS `laporan_harian` (
               `id` INT AUTO_INCREMENT PRIMARY KEY,
               `tanggal` DATE NOT NULL,
+              `pp_kode` VARCHAR(32) NOT NULL DEFAULT 'pp_11_20',
               `driver_name` VARCHAR(120) NOT NULL DEFAULT '',
               `bbm` INT NOT NULL DEFAULT 0,
               `toll` INT NOT NULL DEFAULT 0,
@@ -722,23 +848,49 @@ function ensure_laporan_settlement_tables(): bool
               `notes` TEXT NULL,
               `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
               `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-              UNIQUE KEY `unik_tanggal` (`tanggal`)
+              UNIQUE KEY `unik_tgl_pp` (`tanggal`, `pp_kode`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } else {
+            // Migrasi ringan: tambah pp_kode bila belum ada
+            $cols = $pdo->query("SHOW COLUMNS FROM laporan_harian LIKE 'pp_kode'")->fetch();
+            if (!$cols) {
+                $pdo->exec("ALTER TABLE `laporan_harian`
+                    ADD COLUMN `pp_kode` VARCHAR(32) NOT NULL DEFAULT 'pp_11_20' AFTER `tanggal`");
+                try {
+                    $pdo->exec("ALTER TABLE `laporan_harian` DROP INDEX `unik_tanggal`");
+                } catch (Throwable $e) { /* index mungkin sudah diganti */ }
+                try {
+                    $pdo->exec("ALTER TABLE `laporan_harian` ADD UNIQUE KEY `unik_tgl_pp` (`tanggal`, `pp_kode`)");
+                } catch (Throwable $e) { /* sudah ada */ }
+            }
         }
         $cek2 = $pdo->query("SHOW TABLES LIKE 'laporan_fee_agen'")->fetchColumn();
         if (!$cek2) {
             $pdo->exec("CREATE TABLE IF NOT EXISTS `laporan_fee_agen` (
               `id` INT AUTO_INCREMENT PRIMARY KEY,
               `tanggal` DATE NOT NULL,
+              `pp_kode` VARCHAR(32) NOT NULL DEFAULT 'pp_11_20',
               `booking_id` INT NOT NULL,
               `fee_agen` INT NOT NULL DEFAULT 0,
               `arah` ENUM('berangkat','pulang') NOT NULL DEFAULT 'berangkat',
               `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
               `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-              UNIQUE KEY `unik_tgl_booking` (`tanggal`, `booking_id`),
+              UNIQUE KEY `unik_tgl_pp_booking` (`tanggal`, `pp_kode`, `booking_id`),
               INDEX `idx_tanggal` (`tanggal`),
               INDEX `idx_booking` (`booking_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } else {
+            $cols2 = $pdo->query("SHOW COLUMNS FROM laporan_fee_agen LIKE 'pp_kode'")->fetch();
+            if (!$cols2) {
+                $pdo->exec("ALTER TABLE `laporan_fee_agen`
+                    ADD COLUMN `pp_kode` VARCHAR(32) NOT NULL DEFAULT 'pp_11_20' AFTER `tanggal`");
+                try {
+                    $pdo->exec("ALTER TABLE `laporan_fee_agen` DROP INDEX `unik_tgl_booking`");
+                } catch (Throwable $e) { /* ignore */ }
+                try {
+                    $pdo->exec("ALTER TABLE `laporan_fee_agen` ADD UNIQUE KEY `unik_tgl_pp_booking` (`tanggal`, `pp_kode`, `booking_id`)");
+                } catch (Throwable $e) { /* ignore */ }
+            }
         }
         $ok = true;
         return true;

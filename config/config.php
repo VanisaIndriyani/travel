@@ -16,6 +16,7 @@ define('HARGA_TIKET_DEFAULT', 200000); // Rp 200.000 / org
 // 3. Kontak Admin - EDIT DISINI YA KAAK
 define('WA_ADMIN', '62882003082936'); // Ganti nomor WA admin disini
 define('WA_ADMIN_DISPLAY', '+62 882-0030-82936'); // Tampilan di website
+define('WA_DRIVER', '62882003082936'); // Nomor WA driver default (kirim daftar penumpang) — ganti di sini
 define('ALAMAT_KANTOR', 'Jl. Contoh No. 123, Blora, Jawa Tengah'); // Ganti alamat disini
 define('EMAIL_ADMIN', 'admin@mustikatravel.com');
 
@@ -189,4 +190,18 @@ if (!defined('AI_BASE_URL')) {
 if (!defined('AI_MODEL')) {
     $aiModel = mustika_env('AI_MODEL', 'gpt-4o-mini');
     define('AI_MODEL', $aiModel !== '' ? $aiModel : 'gpt-4o-mini');
+}
+
+// =============================================
+// 10. Link khusus driver (tanpa login admin)
+// Halaman: /driver.php?k=TOKEN
+// Set di .env: DRIVER_ACCESS_TOKEN=rahasia-panjang
+// Jika kosong, dipakai token stabil dari hash (ganti di .env untuk produksi).
+// =============================================
+if (!defined('DRIVER_ACCESS_TOKEN')) {
+    $driverTok = trim(mustika_env('DRIVER_ACCESS_TOKEN', ''));
+    if ($driverTok === '') {
+        $driverTok = substr(hash('sha256', SITE_NAME . '|' . WA_ADMIN . '|driver-gate-v1'), 0, 24);
+    }
+    define('DRIVER_ACCESS_TOKEN', $driverTok);
 }
